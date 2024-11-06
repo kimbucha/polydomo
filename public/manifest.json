@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Polydomo",
+  "version": "1.0",
+  "description": "pomodoro productivity timer",
+  "icons": {
+    "16": "icons/active_icon16.png",
+    "48": "icons/active_icon48.png",
+    "128": "icons/active_icon128.png"
+  },
+  "action": {
+    "default_icon": "icons/inactive_icon128.png",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module",
+    "persistent": false
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms"
+  ]
+}
