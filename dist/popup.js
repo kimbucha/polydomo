@@ -16,7 +16,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _Timer__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./Timer */ "./src/components/Timer.jsx");
-/* harmony import */ var _SubTaskPanel__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./SubTaskPanel */ "./src/components/SubTaskPanel.jsx");
+/* harmony import */ var _TaskPanel__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./TaskPanel */ "./src/components/TaskPanel.jsx");
 /* harmony import */ var _SettingsModal__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./SettingsModal */ "./src/components/SettingsModal.jsx");
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
@@ -101,6 +101,11 @@ var App = function App() {
         });
         setCurrentTask(response.currentTask || '');
         setSubTasks(response.subTasks || []);
+        setSettings(response.settings || {
+          focusDuration: 25,
+          breakDuration: 5,
+          dailyGoal: 8
+        });
       }
     });
 
@@ -125,6 +130,26 @@ var App = function App() {
       return chrome.runtime.onMessage.removeListener(handleUpdate);
     };
   }, []);
+
+  // Listen for state updates
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
+    var handleStateUpdate = function handleStateUpdate(request) {
+      if (request.action === "stateUpdate") {
+        setTimerState({
+          timeLeft: request.state.timeLeft,
+          isRunning: request.state.isRunning,
+          isBreak: request.state.isBreak,
+          isCompleted: request.state.isCompleted,
+          stats: request.state.stats
+        });
+        setSettings(request.state.settings);
+      }
+    };
+    chrome.runtime.onMessage.addListener(handleStateUpdate);
+    return function () {
+      return chrome.runtime.onMessage.removeListener(handleStateUpdate);
+    };
+  }, []);
   var handlePin = function handlePin() {
     setIsPinned(!isPinned);
     chrome.action.setPopup({
@@ -136,12 +161,15 @@ var App = function App() {
     var task = taskInput.trim() || currentTask;
     chrome.runtime.sendMessage({
       action: "startTimer",
-      task: task
+      task: task,
+      focusDuration: settings.focusDuration
     });
     setCurrentTask(task);
     setTaskInput('');
     setTimerState(function (prev) {
       return _objectSpread(_objectSpread({}, prev), {}, {
+        timeLeft: settings.focusDuration * 60,
+        // Sync with focus duration in minutes
         isCompleted: false,
         isRunning: true
       });
@@ -153,6 +181,8 @@ var App = function App() {
     });
     setTimerState(function (prev) {
       return _objectSpread(_objectSpread({}, prev), {}, {
+        timeLeft: settings.breakDuration * 60,
+        // Set to break duration in minutes
         isCompleted: false,
         isBreak: true,
         isRunning: true
@@ -190,7 +220,23 @@ var App = function App() {
       previousTask: currentTask
     });
   };
-  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+
+  // Add the click handler
+  var handleOutsideClick = function handleOutsideClick(e) {
+    if (showSettings && e.target.className === 'settings-modal') {
+      setShowSettings(false);
+    }
+  };
+
+  // Update settings handler
+  var handleUpdateSettings = function handleUpdateSettings(newSettings) {
+    setSettings(newSettings);
+    chrome.runtime.sendMessage({
+      action: "updateSettings",
+      settings: newSettings
+    });
+  };
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement((react__WEBPACK_IMPORTED_MODULE_0___default().Fragment), null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "app-container"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("header", {
     className: "header"
@@ -256,7 +302,7 @@ var App = function App() {
     }
   })) : /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "current-task"
-  }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("h3", null, currentTask)))), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_SubTaskPanel__WEBPACK_IMPORTED_MODULE_2__.SubTaskPanel, {
+  }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("h3", null, currentTask)))), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_TaskPanel__WEBPACK_IMPORTED_MODULE_2__.TaskPanel, {
     onAddSubTask: handleAddSubTask,
     subTasks: subTasks,
     currentTask: currentTask,
@@ -282,15 +328,9 @@ var App = function App() {
     className: timerState.isRunning ? "secondary-button" : "primary-button",
     onClick: timerState.isRunning ? handleReset : handleStartTimer,
     disabled: !timerState.isRunning && !taskInput.trim() && !currentTask
-  }, timerState.isRunning ? 'Reset' : timerState.isBreak ? 'Start Break' : 'Start Focus')), showSettings && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_SettingsModal__WEBPACK_IMPORTED_MODULE_3__.SettingsModal, {
+  }, timerState.isRunning ? 'Reset' : timerState.isBreak ? 'Start Break' : 'Start Focus'))), showSettings && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_SettingsModal__WEBPACK_IMPORTED_MODULE_3__.SettingsModal, {
     settings: settings,
-    onSave: function onSave(newSettings) {
-      setSettings(newSettings);
-      chrome.runtime.sendMessage({
-        action: "updateSettings",
-        settings: newSettings
-      });
-    },
+    onSave: handleUpdateSettings,
     onClose: function onClose() {
       return setShowSettings(false);
     }
@@ -333,14 +373,23 @@ var SettingsModal = function SettingsModal(_ref) {
     _React$useState2 = _slicedToArray(_React$useState, 2),
     localSettings = _React$useState2[0],
     setLocalSettings = _React$useState2[1];
-  var handleSave = function handleSave() {
-    onSave(localSettings);
-    onClose();
-  };
+  var modalRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
+    var handleClickOutside = function handleClickOutside(event) {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return function () {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
   return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-    className: "settings-modal"
+    className: "modal-overlay"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-    className: "modal-content"
+    className: "modal-wrapper",
+    ref: modalRef
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "modal-header"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("h3", null, "Settings"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("button", {
@@ -435,15 +484,15 @@ var SettingsModal = function SettingsModal(_ref) {
 
 /***/ }),
 
-/***/ "./src/components/SubTaskPanel.jsx":
-/*!*****************************************!*\
-  !*** ./src/components/SubTaskPanel.jsx ***!
-  \*****************************************/
+/***/ "./src/components/TaskPanel.jsx":
+/*!**************************************!*\
+  !*** ./src/components/TaskPanel.jsx ***!
+  \**************************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   SubTaskPanel: () => (/* binding */ SubTaskPanel),
+/* harmony export */   TaskPanel: () => (/* binding */ TaskPanel),
 /* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
 /* harmony export */ });
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "./node_modules/react/index.js");
@@ -455,7 +504,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
 function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
 function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 
-var SubTaskPanel = function SubTaskPanel(_ref) {
+var TaskPanel = function TaskPanel(_ref) {
   var currentTask = _ref.currentTask,
     taskInput = _ref.taskInput,
     setTaskInput = _ref.setTaskInput,
@@ -497,7 +546,7 @@ var SubTaskPanel = function SubTaskPanel(_ref) {
     }, type === 'related' ? 'Related' : 'Follow Up'));
   };
   return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-    className: "subtask-panel ".concat(isVisible ? 'visible' : '')
+    className: "task-panel ".concat(isVisible ? 'visible' : '')
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "current-context"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
@@ -522,7 +571,7 @@ var SubTaskPanel = function SubTaskPanel(_ref) {
   })) : /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("h3", null, currentTask)), isCompleted && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "session-complete-message ".concat(isBreak ? 'break' : '')
   }, isBreak ? "Break time! Add any tasks you thought of during focus." : "Great job! Take a break or add related tasks.")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("form", {
-    className: "subtask-form",
+    className: "task-form",
     onSubmit: handleAddSubTask
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "category-selector"
@@ -551,27 +600,27 @@ var SubTaskPanel = function SubTaskPanel(_ref) {
       return setNewSubTask(e.target.value);
     },
     placeholder: category === 'related' ? "Add a task related to your current focus..." : "Add a task to do after this session...",
-    className: "subtask-input"
+    className: "task-input"
   }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("button", {
     type: "submit",
-    className: "add-subtask-btn",
+    className: "add-task-btn",
     disabled: !newSubTask.trim()
   }, "Add Task"))), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-    className: "subtasks-list"
+    className: "tasks-list"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("h4", null, "Captured Tasks ", subTasks.length > 0 && "(".concat(subTasks.length, ")")), subTasks.length > 0 ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-    className: "subtasks-grid"
+    className: "tasks-grid"
   }, subTasks.map(function (task, index) {
     return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
       key: index,
-      className: "subtask-card ".concat(task.category)
+      className: "task-card ".concat(task.category)
     }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-      className: "subtask-header"
+      className: "task-header"
     }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(CategoryTag, {
       type: task.category
     }), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
       className: "capture-time"
     }, formatTimeAgo(task.capturedAt))), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("p", {
-      className: "subtask-text"
+      className: "task-text"
     }, task.text), isCompleted && !isBreak && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("button", {
       className: "focus-next-btn",
       onClick: function onClick() {
@@ -579,7 +628,7 @@ var SubTaskPanel = function SubTaskPanel(_ref) {
       }
     }, "Focus on This Next"));
   })) : /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-    className: "empty-subtasks"
+    className: "empty-tasks"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("p", null, "No tasks captured yet"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
     className: "category-examples"
   }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", null, "\uD83D\uDD04 Related: Tasks connected to current focus"), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", null, "\uD83D\uDCCC Follow Up: Tasks for after this session")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
@@ -591,7 +640,7 @@ var formatTimeAgo = function formatTimeAgo(timestamp) {
   if (minutes < 1) return 'Just now';
   return "".concat(minutes, "m ago");
 };
-/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (SubTaskPanel);
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (TaskPanel);
 
 /***/ }),
 
@@ -619,10 +668,11 @@ var Timer = function Timer(_ref) {
       focusMinutes: 0,
       completedPomodoros: 0,
       currentStreak: 0
-    } : _ref$stats;
+    } : _ref$stats,
+    settings = _ref.settings;
   var formatTime = function formatTime(seconds) {
     if (typeof seconds !== 'number' || isNaN(seconds)) {
-      return '25:00';
+      return isBreak ? "".concat(settings.breakDuration, ":00") : "".concat(settings.focusDuration, ":00");
     }
     var minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
     var secs = (seconds % 60).toString().padStart(2, '0');
@@ -630,7 +680,7 @@ var Timer = function Timer(_ref) {
   };
   var getStateText = function getStateText() {
     if (isCompleted) {
-      return isBreak ? 'Break Complete!' : 'Session Complete!';
+      return isBreak ? 'Break Complete!' : 'Focus Session Complete!';
     }
     if (isBreak) {
       return isRunning ? 'Break Time' : 'Take a Break';
@@ -1013,7 +1063,7 @@ body {
 }
 
 /* SubTask Panel */
-.subtask-panel {
+.task-panel {
   background: var(--bg-secondary);
   border-radius: 12px;
   padding: 20px;
@@ -1022,7 +1072,7 @@ body {
   transition: all var(--transition-normal);
 }
 
-.subtask-panel.visible {
+.task-panel.visible {
   opacity: 1;
   transform: translateY(0);
 }
@@ -1056,8 +1106,11 @@ body {
 }
 
 /* SubTask Form and Categories */
-.subtask-form {
-  margin-bottom: 24px;
+.task-form {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
 }
 
 .category-selector {
@@ -1071,41 +1124,45 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 8px 16px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: 13px;
-  cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .category-btn .icon {
-  font-size: 16px;
+  font-size: 14px;
+}
+
+.category-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
 }
 
 .category-btn.active {
   background: var(--accent-color-alpha);
-  color: var(--accent-color);
   border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .break .category-btn.active {
   background: var(--break-color-alpha);
-  color: var(--break-color);
   border-color: var(--break-color);
+  color: var(--break-color);
 }
 
 /* SubTask Cards */
-.subtasks-grid {
+.tasks-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
-.subtask-card {
+.task-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -1113,27 +1170,27 @@ body {
   transition: all var(--transition-normal);
 }
 
-.subtask-card:hover {
+.task-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.subtask-card.related {
+.task-card.related {
   border-left: 3px solid var(--accent-color);
 }
 
-.subtask-card.followUp {
+.task-card.followUp {
   border-left: 3px solid var(--break-accent);
 }
 
-.subtask-header {
+.task-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
 
-.subtask-text {
+.task-text {
   margin: 0;
   font-size: 14px;
   color: var(--text-primary);
@@ -1147,23 +1204,52 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
-  animation: fadeIn var(--transition-quick) ease;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.2s ease;
 }
 
 .modal-content {
   background: var(--bg-primary);
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 24px;
   width: 90%;
-  max-width: 360px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  animation: slideUp var(--transition-normal) ease;
+  max-width: 320px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  animation: modalSlideIn 0.2s ease;
+  position: relative;
+  transform-origin: center center;
+}
+
+/* Smooth animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Prevent background content shift */
+body.modal-open {
+  overflow: hidden;
+  padding-right: var(--scrollbar-width);
 }
 
 .modal-header {
@@ -1281,7 +1367,7 @@ body {
 }
 
 /* Empty States */
-.empty-subtasks {
+.empty-tasks {
   text-align: center;
   padding: 24px;
   background: var(--bg-primary);
@@ -1289,7 +1375,7 @@ body {
   border: 1px dashed var(--border-color);
 }
 
-.empty-subtasks p {
+.empty-tasks p {
   margin: 0 0 8px 0;
   color: var(--text-primary);
   font-weight: 500;
@@ -1310,7 +1396,7 @@ body {
     font-size: 40px;
   }
 
-  .subtasks-grid {
+  .tasks-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1615,7 +1701,7 @@ body {
 }
 
 /* Input Standardization */
-.task-input, #taskInput, .subtask-input {
+.task-input, #taskInput, .task-input {
   width: calc(100% - 24px);
   padding: 10px 12px;
   border: 2px solid var(--border-color);
@@ -1627,7 +1713,7 @@ body {
   color: var(--text-primary);
 }
 
-.task-input:focus, #taskInput:focus, .subtask-input:focus {
+.task-input:focus, #taskInput:focus, .task-input:focus {
   border-color: var(--accent-color);
   box-shadow: 0 0 0 3px var(--accent-color-alpha);
   outline: none;
@@ -1750,18 +1836,20 @@ body {
   margin-top: 12px;
 }
 
-.subtask-input {
+.task-input {
   flex: 1;
   height: 40px;
-  padding: 8px 12px;
+  padding: 8px 16px;
   border: 2px solid var(--border-color);
   border-radius: 8px;
   font-size: 14px;
   transition: all var(--transition-normal);
 }
 
-.add-subtask-btn {
-  padding: 8px 16px;
+.add-task-btn {
+  min-width: 100px;
+  height: 40px;
+  padding: 0 20px;
   border-radius: 8px;
   border: none;
   background: var(--accent-color);
@@ -1772,7 +1860,7 @@ body {
   transition: all var(--transition-normal);
 }
 
-.break .add-subtask-btn {
+.break .add-task-btn {
   background: var(--break-color);
 }
 
@@ -1836,7 +1924,7 @@ body {
 }
 
 /* Task Cards */
-.subtask-card {
+.task-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -1844,13 +1932,13 @@ body {
   transition: all var(--transition-normal);
 }
 
-.subtask-card:hover {
+.task-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 /* Card Components */
-.subtask-header {
+.task-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2135,20 +2223,20 @@ body {
 }
 
 /* Subtask Refinements */
-.subtask-input {
+.task-input {
   height: 36px;
   font-size: 13px;
   padding: 8px 12px;
 }
 
-.add-subtask-btn {
+.add-task-btn {
   height: 36px;
   padding: 0 16px;
   font-size: 13px;
 }
 
 /* Input Placeholders */
-.subtask-input::placeholder {
+.task-input::placeholder {
   opacity: 0.6;
   text-overflow: ellipsis;
 }
@@ -2288,7 +2376,178 @@ body {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
-}`, "",{"version":3,"sources":["webpack://./src/styles.css"],"names":[],"mappings":"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","sourcesContent":["/* Root Variables - Tomato & Green Theme */\n:root {\n  /* Core Colors */\n  --bg-primary: #ffffff;\n  --bg-secondary: #fafafa;\n  --text-primary: #1a2b3b;\n  --text-secondary: #697586;\n  --border-color: #e5e7eb;\n  \n  /* Focus Mode - Tomato Theme */\n  --accent-color: #FF6B6B;\n  --accent-hover: #FF5252;\n  --accent-color-alpha: rgba(255, 107, 107, 0.1);\n  --focus-gradient-start: #FFF5F5;\n  --focus-gradient-end: #ffffff;\n  \n  /* Break Mode - Healing Green */\n  --break-color: #4ade80;\n  --break-hover: #22c55e;\n  --break-color-alpha: rgba(74, 222, 128, 0.1);\n  --break-gradient-start: #f0fdf4;\n  --break-gradient-end: #ffffff;\n  \n  /* State Colors */\n  --danger-color: #dc2626;\n  --success-color: #10b981;\n  \n  /* Transitions */\n  --transition-quick: 150ms;\n  --transition-normal: 300ms;\n}\n\n/* Font Imports */\n@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');\n\n/* Base Styles */\nbody {\n  width: 320px;\n  margin: 0;\n  padding: 0;\n  max-height: 600px;\n  min-height: 400px;\n  overflow: hidden;\n  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;\n  -webkit-font-smoothing: antialiased;\n  background: var(--bg-primary);\n}\n\n.app-container {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  padding: 16px;\n  gap: 12px;\n  background: var(--bg-primary);\n}\n\n/* Header Styles */\n.header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin: 0 0 8px 0;\n  padding: 4px 0;\n}\n\n.app-title {\n  font-size: 18px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n.header-controls {\n  display: flex;\n  gap: 8px;\n  align-items: center;\n}\n\n.icon-btn {\n  background: none;\n  border: none;\n  padding: 8px;\n  cursor: pointer;\n  border-radius: 6px;\n  color: var(--text-secondary);\n  transition: all var(--transition-normal);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.icon-btn:hover {\n  background-color: var(--bg-secondary);\n  color: var(--text-primary);\n}\n\n.icon-btn.active {\n  color: var(--accent-color);\n  background-color: var(--accent-color-alpha);\n}\n\n/* Timer Container */\n.timer-container {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  align-items: center;\n  min-height: 200px;\n  margin: 12px 0;\n  padding: 24px;\n  text-align: center;\n  border-radius: 16px;\n  transition: all var(--transition-normal);\n}\n\n.timer-container.focus {\n  background: linear-gradient(\n    145deg,\n    var(--focus-gradient-start) 0%,\n    var(--focus-gradient-end) 100%\n  );\n  border: 1px solid rgba(255, 107, 107, 0.1);\n}\n\n.timer-container.break {\n  background: linear-gradient(\n    145deg,\n    var(--break-gradient-start) 0%,\n    var(--break-gradient-end) 100%\n  );\n  border: 1px solid rgba(74, 222, 128, 0.1);\n}\n\n.timer-container.break::before {\n  background: radial-gradient(\n    circle at center,\n    var(--break-accent-light) 0%,\n    transparent 70%\n  );\n}\n\n.timer-container.paused {\n  opacity: 0.8;\n}\n\n.timer-container.completed {\n  animation: pulseComplete 2s infinite;\n}\n\n.timer-display {\n  font-size: 48px;\n  font-weight: 700;\n  margin: 0;\n  line-height: 1;\n}\n\n.timer-type {\n  margin: 8px 0 16px 0;\n}\n\n/* Button Styles */\n.button-container {\n  margin-top: auto;\n  padding-bottom: 8px;\n  width: 100%;\n}\n\n.primary-button,\n.secondary-button,\n.danger-button {\n  flex: 1;\n  padding: 12px 24px;\n  border-radius: 10px;\n  font-weight: 500;\n  transition: all var(--transition-normal);\n  border: none;\n  cursor: pointer;\n  font-size: 14px;\n}\n\n.primary-button {\n  background: var(--accent-color);\n  color: white;\n}\n\n.primary-button:hover:not(:disabled) {\n  background: var(--accent-hover);\n  transform: translateY(-1px);\n}\n\n.primary-button:disabled {\n  opacity: 0.5;\n  cursor: not-allowed;\n}\n\n.secondary-button {\n  background: var(--bg-secondary);\n  color: var(--text-primary);\n  border: 1px solid var(--border-color);\n}\n\n.secondary-button:hover {\n  background: var(--bg-hover);\n  border-color: var(--text-secondary);\n}\n\n.danger-button {\n  background: var(--danger-color);\n  color: white;\n}\n\n.danger-button:hover {\n  opacity: 0.9;\n  transform: translateY(-1px);\n}\n\n/* Task Input */\n.task-container {\n  margin: 0;\n}\n\n#taskInput,\n.task-input {\n  width: 100%;\n  height: 42px;\n  padding: 0 16px;\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 15px;\n  transition: all var(--transition-quick);\n}\n\n#taskInput:focus,\n.task-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 3px var(--accent-color-alpha);\n  outline: none;\n}\n\n.task-title {\n  font-size: 14px;\n  font-weight: 600;\n  margin: 0;\n  padding: 10px 0;\n  color: var(--text-primary);\n}\n\n/* Stats Panel */\n.stats-panel {\n  margin-top: auto;\n  padding: 12px 0 0 0;\n  border-top: 1px solid var(--border-color);\n}\n\n.break .stats-panel {\n  border-color: var(--break-color-alpha);\n}\n\n.stats-row {\n  display: flex;\n  justify-content: space-between;\n  margin-bottom: 12px;\n}\n\n.stats-item {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  align-items: center;\n  text-align: center;\n}\n\n.stats-label {\n  font-size: 12px;\n  color: var(--text-secondary);\n  font-weight: 500;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.stats-value {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Progress Bar */\n.progress-container {\n  width: 100%;\n  margin-top: 16px;\n}\n\n.progress-bar {\n  width: 100%;\n  height: 4px;\n  background: var(--border-color);\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n.progress-fill {\n  height: 100%;\n  background-color: var(--accent-color);\n  transition: width var(--transition-normal), background-color var(--transition-normal);\n}\n\n.break .progress-fill {\n  background-color: var(--break-color);\n}\n\n/* SubTask Panel */\n.subtask-panel {\n  background: var(--bg-secondary);\n  border-radius: 12px;\n  padding: 20px;\n  margin-top: 16px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);\n  transition: all var(--transition-normal);\n}\n\n.subtask-panel.visible {\n  opacity: 1;\n  transform: translateY(0);\n}\n\n.current-context {\n  margin: 16px 0;\n  padding: 0 0 16px 0;\n  border-bottom: 1px solid var(--border-color);\n}\n\n.current-focus {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.context-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  margin-bottom: 8px;\n}\n\n.current-focus h3 {\n  margin: 0;\n  font-size: 16px;\n  color: var(--text-primary);\n  font-weight: 600;\n}\n\n/* SubTask Form and Categories */\n.subtask-form {\n  margin-bottom: 24px;\n}\n\n.category-selector {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 12px;\n}\n\n.category-btn {\n  flex: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  padding: 8px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 8px;\n  background: var(--bg-primary);\n  color: var(--text-secondary);\n  font-size: 13px;\n  cursor: pointer;\n  transition: all 0.2s ease;\n}\n\n.category-btn .icon {\n  font-size: 16px;\n}\n\n.category-btn.active {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n  border-color: var(--accent-color);\n}\n\n.break .category-btn.active {\n  background: var(--break-color-alpha);\n  color: var(--break-color);\n  border-color: var(--break-color);\n}\n\n/* SubTask Cards */\n.subtasks-grid {\n  display: grid;\n  gap: 12px;\n  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));\n}\n\n.subtask-card {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-radius: 10px;\n  padding: 12px;\n  transition: all var(--transition-normal);\n}\n\n.subtask-card:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);\n}\n\n.subtask-card.related {\n  border-left: 3px solid var(--accent-color);\n}\n\n.subtask-card.followUp {\n  border-left: 3px solid var(--break-accent);\n}\n\n.subtask-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 8px;\n}\n\n.subtask-text {\n  margin: 0;\n  font-size: 14px;\n  color: var(--text-primary);\n  line-height: 1.4;\n}\n\n/* Modal Styles */\n.settings-modal {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background: rgba(0, 0, 0, 0.5);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 1000;\n  backdrop-filter: blur(4px);\n  animation: fadeIn var(--transition-quick) ease;\n}\n\n.modal-content {\n  background: var(--bg-primary);\n  border-radius: 16px;\n  padding: 24px;\n  width: 90%;\n  max-width: 360px;\n  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);\n  animation: slideUp var(--transition-normal) ease;\n}\n\n.modal-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 20px;\n}\n\n.modal-header h3 {\n  font-size: 18px;\n  font-weight: 600;\n  margin: 0;\n}\n\n/* Settings Form */\n.settings-form {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  padding: 20px 0;\n}\n\n.settings-group {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n\n.settings-group label {\n  font-size: 13px;\n  color: var(--text-secondary);\n  font-weight: 500;\n}\n\n.settings-group input {\n  padding: 8px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all var(--transition-normal);\n}\n\n.settings-group input:focus {\n  outline: none;\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.input-with-unit {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.unit {\n  color: var(--text-secondary);\n  font-size: 13px;\n}\n\n/* Completion Buttons */\n.completion-buttons {\n  display: flex;\n  gap: 12px;\n  width: 100%;\n}\n\n.completion-buttons button {\n  flex: 1;\n}\n\n/* Animations and Keyframes */\n@keyframes pulseComplete {\n  0% { transform: scale(1); }\n  50% { transform: scale(1.02); }\n  100% { transform: scale(1); }\n}\n\n@keyframes fadeIn {\n  from { opacity: 0; }\n  to { opacity: 1; }\n}\n\n@keyframes slideIn {\n  from { transform: translateY(-10px); opacity: 0; }\n  to { transform: translateY(0); opacity: 1; }\n}\n\n@keyframes slideUp {\n  from { transform: translateY(20px); opacity: 0; }\n  to { transform: translateY(0); opacity: 1; }\n}\n\n@keyframes ripple {\n  from {\n    transform: scale(0);\n    opacity: 0.2;\n  }\n  to {\n    transform: scale(2);\n    opacity: 0;\n  }\n}\n\n@keyframes shake {\n  0%, 100% { transform: translateX(0); }\n  25% { transform: translateX(-5px); }\n  75% { transform: translateX(5px); }\n}\n\n/* Utility Classes */\n.error {\n  border-color: var(--danger-color) !important;\n  animation: shake 0.5s ease-in-out;\n}\n\n/* Empty States */\n.empty-subtasks {\n  text-align: center;\n  padding: 24px;\n  background: var(--bg-primary);\n  border-radius: 8px;\n  border: 1px dashed var(--border-color);\n}\n\n.empty-subtasks p {\n  margin: 0 0 8px 0;\n  color: var(--text-primary);\n  font-weight: 500;\n}\n\n.tip {\n  font-size: 13px;\n  color: var(--text-secondary);\n}\n\n/* Responsive Adjustments */\n@media (max-width: 360px) {\n  body {\n    padding: 12px;\n  }\n\n  .timer-display {\n    font-size: 40px;\n  }\n\n  .subtasks-grid {\n    grid-template-columns: 1fr;\n  }\n\n  .break-actions {\n    flex-direction: column;\n  }\n\n  .modal-content {\n    width: 95%;\n    padding: 16px;\n  }\n}\n\n/* Category Tags */\n.category-tag {\n  font-size: 12px;\n  padding: 4px 8px;\n  border-radius: 4px;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n}\n\n.category-tag.related {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n}\n\n.category-tag.followUp {\n  background: var(--break-accent-light);\n  color: var(--break-accent);\n}\n\n/* Focus States */\n*:focus-visible {\n  outline: 2px solid var(--accent-color);\n  outline-offset: 2px;\n}\n\n/* Timer Type Indicator */\n.timer-type {\n  font-size: 14px;\n  font-weight: 500;\n  margin-top: 8px;\n  transition: color var(--transition-normal);\n}\n\n.break .timer-type {\n  color: var(--break-color);\n}\n\n.focus .timer-type {\n  color: var(--accent-color);\n}\n\n/* Timer Display */\n.timer-display {\n  font-size: 48px;\n  font-weight: 700;\n  transition: color var(--transition-normal);\n}\n\n.focus .timer-display {\n  color: var(--accent-color);\n}\n\n.break .timer-display {\n  color: var(--break-color);\n}\n\n/* Completion Animations */\n.timer-container.completed.focus {\n  animation: completePulseFocus 2s infinite;\n}\n\n.timer-container.completed.break {\n  animation: completePulseBreak 2s infinite;\n}\n\n@keyframes completePulseFocus {\n  0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.2); }\n  70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }\n  100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }\n}\n\n@keyframes completePulseBreak {\n  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.2); }\n  70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }\n  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }\n}\n\n/* Responsive Height Adjustments */\n@media (max-height: 500px) {\n  .timer-container {\n    min-height: 160px;\n    padding: 16px;\n  }\n  \n  .timer-display {\n    font-size: 40px;\n  }\n  \n  .button-container {\n    padding-bottom: 4px;\n  }\n}\n\n/* Scrollbar Styling */\n::-webkit-scrollbar {\n  width: 8px;\n}\n\n::-webkit-scrollbar-track {\n  background: var(--bg-secondary);\n  border-radius: 4px;\n}\n\n::-webkit-scrollbar-thumb {\n  background: var(--border-color);\n  border-radius: 4px;\n}\n\n::-webkit-scrollbar-thumb:hover {\n  background: var(--text-secondary);\n}\n\n/* Timer Display Refinements */\n.timer-display {\n  font-size: 64px;\n  font-weight: 700;\n  line-height: 1;\n  margin: 0;\n  background: linear-gradient(\n    to bottom,\n    var(--text-primary) 0%,\n    var(--text-secondary) 120%\n  );\n  -webkit-background-clip: text;\n  -webkit-text-fill-color: transparent;\n  transition: all var(--transition-normal);\n}\n\n/* Timer Container Enhancements */\n.timer-container {\n  position: relative;\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  border: 1px solid transparent;\n}\n\n.timer-container::before {\n  content: '';\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  padding: 1px;\n  background: linear-gradient(\n    to bottom right,\n    var(--accent-color),\n    transparent\n  );\n  -webkit-mask: \n    linear-gradient(#fff 0 0) content-box, \n    linear-gradient(#fff 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  opacity: 0;\n  transition: opacity 0.3s ease;\n}\n\n.timer-container:hover::before {\n  opacity: 1;\n}\n\n/* Break Mode Styles */\n.timer-container.break::before {\n  background: linear-gradient(\n    to bottom right,\n    var(--break-color),\n    transparent\n  );\n}\n\n/* Task Input Enhancement */\n.task-input {\n  transform: translateY(0);\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  transform: translateY(-1px);\n}\n\n/* Button Enhancements */\n.primary-button {\n  position: relative;\n  overflow: hidden;\n  transition: all 0.2s ease;\n}\n\n.primary-button::after {\n  content: '';\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  background: linear-gradient(\n    to right,\n    transparent,\n    rgba(255, 255, 255, 0.2),\n    transparent\n  );\n  transform: translateX(-100%);\n}\n\n.primary-button:hover::after {\n  transform: translateX(100%);\n  transition: transform 0.6s ease;\n}\n\n/* Mode Indicator */\n.mode-indicator {\n  position: absolute;\n  top: 12px;\n  right: 12px;\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  background: var(--accent-color);\n  transition: all 0.3s ease;\n}\n\n.break .mode-indicator {\n  background: var(--break-color);\n}\n\n/* Timer Type Refinements */\n.timer-type {\n  position: relative;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-secondary);\n  margin-top: 12px;\n  transition: all 0.3s ease;\n}\n\n.timer-type::after {\n  content: '';\n  position: absolute;\n  bottom: -4px;\n  left: 50%;\n  transform: translateX(-50%);\n  width: 0;\n  height: 2px;\n  background: var(--accent-color);\n  transition: width 0.3s ease;\n}\n\n.break .timer-type::after {\n  background: var(--break-color);\n}\n\n.timer-container:hover .timer-type::after {\n  width: 100%;\n}\n\n/* Loading State */\n.app-container.loading {\n  justify-content: center;\n}\n\n.loading .timer-container {\n  animation: shimmer 1.5s infinite;\n  background: linear-gradient(\n    90deg,\n    var(--bg-secondary) 0%,\n    var(--bg-primary) 50%,\n    var(--bg-secondary) 100%\n  );\n  background-size: 200% 100%;\n}\n\n@keyframes shimmer {\n  0% { background-position: -200% 0; }\n  100% { background-position: 200% 0; }\n}\n\n/* Responsive Adjustments */\n@media screen and (max-height: 500px) {\n  .timer-display {\n    font-size: 48px;\n  }\n  \n  .timer-container {\n    min-height: 160px;\n    padding: 16px;\n  }\n  \n  .button-container {\n    padding-bottom: 4px;\n  }\n}\n\n/* Input Standardization */\n.task-input, #taskInput, .subtask-input {\n  width: calc(100% - 24px);\n  padding: 10px 12px;\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 14px;\n  line-height: 1.4;\n  transition: all var(--transition-normal);\n  background: var(--bg-primary);\n  color: var(--text-primary);\n}\n\n.task-input:focus, #taskInput:focus, .subtask-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 3px var(--accent-color-alpha);\n  outline: none;\n  transform: translateY(-1px);\n}\n\n/* Category Tag Refinements */\n.category-tag {\n  font-size: 12px;\n  padding: 4px 8px;\n  border-radius: 6px;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 500;\n}\n\n.category-tag .icon {\n  font-size: 14px;\n}\n\n/* Stats Panel Layout */\n.stats-panel {\n  padding: 16px;\n  margin-top: 16px;\n  border-top: 1px solid var(--border-color);\n  display: flex;\n  justify-content: space-around;\n}\n\n.stats-item {\n  min-width: 80px;\n  padding: 0 8px;\n  text-align: center;\n}\n\n.stats-label {\n  font-size: 12px;\n  letter-spacing: 0.5px;\n  text-transform: uppercase;\n  color: var(--text-secondary);\n  margin-bottom: 4px;\n}\n\n.stats-value {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Progress Bar Refinements */\n.progress-container {\n  margin-top: 16px;\n  padding-top: 8px;\n  width: 100%;\n}\n\n.progress-label {\n  font-size: 12px;\n  color: var(--text-secondary);\n  margin-bottom: 6px;\n  display: flex;\n  justify-content: space-between;\n}\n\n/* Button State Colors */\n.timer-container.break ~ .button-container .primary-button {\n  background: var(--break-color);\n}\n\n.timer-container.break ~ .button-container .primary-button:hover:not(:disabled) {\n  background: var(--break-hover);\n}\n\n/* Completion States */\n.timer-container.completed {\n  background: var(--break-gradient-start);\n}\n\n.timer-container.completed.focus {\n  background: var(--focus-gradient-start);\n}\n\n.timer-container.completed.break {\n  background: var(--break-gradient-start);\n}\n\n/* Break Mode Button States */\n.break .primary-button {\n  background: var(--break-color);\n}\n\n.break .primary-button:hover:not(:disabled) {\n  background: var(--break-hover);\n}\n\n.break .primary-button:disabled {\n  background: var(--break-color);\n  opacity: 0.5;\n}\n\n/* Focus Mode Button States */\n.focus .primary-button {\n  background: var(--accent-color);\n}\n\n.focus .primary-button:hover:not(:disabled) {\n  background: var(--accent-hover);\n}\n\n.focus .primary-button:disabled {\n  background: var(--accent-color);\n  opacity: 0.5;\n}\n\n/* Input Group */\n.input-group {\n  display: flex;\n  gap: 8px;\n  margin-top: 12px;\n}\n\n.subtask-input {\n  flex: 1;\n  height: 40px;\n  padding: 8px 12px;\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 14px;\n  transition: all var(--transition-normal);\n}\n\n.add-subtask-btn {\n  padding: 8px 16px;\n  border-radius: 8px;\n  border: none;\n  background: var(--accent-color);\n  color: white;\n  font-size: 14px;\n  font-weight: 500;\n  cursor: pointer;\n  transition: all var(--transition-normal);\n}\n\n.break .add-subtask-btn {\n  background: var(--break-color);\n}\n\n/* Category Selection */\n.category-selector {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 12px;\n}\n\n.category-btn {\n  flex: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  padding: 8px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 8px;\n  background: var(--bg-primary);\n  color: var(--text-secondary);\n  font-size: 13px;\n  cursor: pointer;\n  transition: all 0.2s ease;\n}\n\n.category-btn .icon {\n  font-size: 16px;\n}\n\n.category-btn.active {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n  border-color: var(--accent-color);\n}\n\n.break .category-btn.active {\n  background: var(--break-color-alpha);\n  color: var(--break-color);\n  border-color: var(--break-color);\n}\n\n/* Category Tags */\n.category-tag {\n  display: inline-flex;\n  align-items: center;\n  padding: 4px 8px;\n  border-radius: 6px;\n  font-size: 12px;\n  font-weight: 500;\n}\n\n.category-tag.related {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n}\n\n.category-tag.followUp {\n  background: var(--break-color-alpha);\n  color: var(--break-color);\n}\n\n/* Task Cards */\n.subtask-card {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-radius: 10px;\n  padding: 12px;\n  transition: all var(--transition-normal);\n}\n\n.subtask-card:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);\n}\n\n/* Card Components */\n.subtask-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 8px;\n}\n\n.capture-time {\n  font-size: 12px;\n  color: var(--text-secondary);\n}\n\n/* Focus Next Button */\n.focus-next-btn {\n  margin-top: 12px;\n  width: 100%;\n  padding: 8px;\n  background: none;\n  border: 1px solid var(--accent-color);\n  color: var(--accent-color);\n  border-radius: 6px;\n  font-size: 13px;\n  cursor: pointer;\n  transition: all var(--transition-normal);\n}\n\n.break .focus-next-btn {\n  border-color: var(--break-color);\n  color: var(--break-color);\n}\n\n.focus-next-btn:hover {\n  background: var(--accent-color);\n  color: white;\n}\n\n.break .focus-next-btn:hover {\n  background: var(--break-color);\n  color: white;\n}\n\n/* Break Duration Display */\n.break-duration {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 14px;\n  color: var(--break-color);\n  background: var(--break-color-alpha);\n  padding: 4px 8px;\n  border-radius: 6px;\n  margin-left: 8px;\n}\n\n.break-duration-icon {\n  font-size: 16px;\n}\n\n/* Updated Task Section Styles */\n.task-section {\n  margin: 16px 0;\n  padding: 0 12px;\n  animation: slideIn 0.3s ease;\n}\n\n.section-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  margin-bottom: 8px;\n}\n\n.task-input-container {\n  position: relative;\n}\n\n.task-input {\n  width: 100%;\n  padding: 10px 12px;\n  background: var(--bg-primary);\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 14px;\n  transition: all var(--transition-normal);\n}\n\n.task-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 3px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 3px var(--break-color-alpha);\n}\n\n.current-task-display {\n  padding: 10px;\n  background: var(--bg-secondary);\n  border-radius: 8px;\n  transition: all var(--transition-normal);\n  animation: slideIn 0.3s ease;\n}\n\n.current-task-display h3 {\n  margin: 0;\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Stats Display Improvements */\n.stats-panel {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 16px;\n  padding: 16px;\n  margin-top: 20px;\n  background: var(--bg-secondary);\n  border-radius: 12px;\n}\n\n.stats-item {\n  text-align: center;\n}\n\n.stats-value {\n  font-size: 24px;\n  font-weight: 600;\n  color: var(--text-primary);\n  margin-bottom: 4px;\n}\n\n.stats-label {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  color: var(--text-secondary);\n}\n\n/* Progress Bar Refinements */\n.progress-container {\n  margin-top: 16px;\n  padding-top: 8px;\n  border-top: 1px solid var(--border-color);\n}\n\n.progress-label {\n  font-size: 12px;\n  color: var(--text-secondary);\n  margin-bottom: 8px;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n}\n\n.progress-bar {\n  height: 6px;\n  background: var(--bg-primary);\n  border-radius: 3px;\n  overflow: hidden;\n}\n\n.progress-fill {\n  height: 100%;\n  background: var(--accent-color);\n  transition: width 0.6s ease;\n}\n\n.break .progress-fill {\n  background: var(--break-color);\n}\n\n/* Animation Improvements */\n@keyframes slideIn {\n  from {\n    opacity: 0;\n    transform: translateY(-8px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n\n/* Mode Transitions */\n.mode-transition {\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n}\n\n.mode-transition.break {\n  --accent-color: var(--break-color);\n  --accent-hover: var(--break-hover);\n  --accent-color-alpha: var(--break-color-alpha);\n}\n\n/* Cohesive Timer and Stats Area */\n.timer-container {\n  background: var(--bg-primary);\n  border-radius: 16px;\n  padding: 24px;\n  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);\n  margin-bottom: 0;\n}\n\n/* Current Task Section */\n.current-task-section {\n  margin: 16px 0;\n  padding: 0 0 16px 0;\n  border-bottom: 1px solid var(--border-color);\n}\n\n.section-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  margin-bottom: 8px;\n}\n\n.task-input-wrapper {\n  position: relative;\n}\n\n.task-input {\n  width: 100%;\n  height: 36px;\n  padding: 8px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  background: var(--bg-primary);\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n/* Unified Stats Panel */\n.stats-panel {\n  margin-top: 16px;\n  padding: 16px;\n  border-top: 1px solid var(--border-color);\n  background: transparent;\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 12px;\n}\n\n.stats-item {\n  text-align: center;\n}\n\n.stats-value {\n  font-size: 20px;\n  font-weight: 600;\n  color: var(--text-primary);\n  margin-bottom: 4px;\n}\n\n.stats-label {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n\n/* Progress Bar */\n.progress-container {\n  margin-top: 16px;\n  padding-top: 12px;\n  border-top: 1px solid var(--border-color);\n}\n\n/* Subtask Refinements */\n.subtask-input {\n  height: 36px;\n  font-size: 13px;\n  padding: 8px 12px;\n}\n\n.add-subtask-btn {\n  height: 36px;\n  padding: 0 16px;\n  font-size: 13px;\n}\n\n/* Input Placeholders */\n.subtask-input::placeholder {\n  opacity: 0.6;\n  text-overflow: ellipsis;\n}\n\n/* Current Task Display */\n.current-task {\n  padding: 10px 12px;\n  background: var(--bg-secondary);\n  border-radius: 6px;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-primary);\n  transition: all 0.2s ease;\n}\n\n/* Responsive Adjustments */\n@media screen and (max-height: 500px) {\n  .timer-container {\n    padding: 16px;\n  }\n  \n  .current-task-section {\n    margin: 12px 0;\n    padding: 0 0 12px 0;\n  }\n  \n  .stats-panel {\n    padding: 12px;\n    gap: 8px;\n  }\n  \n  .stats-value {\n    font-size: 18px;\n  }\n}\n\n/* Task Section in Timer */\n.task-section {\n  margin: 16px 0;\n  padding: 0 0 16px 0;\n  border-bottom: 1px solid var(--border-color);\n}\n\n.context-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  margin-bottom: 8px;\n}\n\n.task-input-container {\n  position: relative;\n}\n\n.task-input {\n  width: 100%;\n  height: 36px;\n  padding: 8px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  background: var(--bg-primary);\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n.current-task-display {\n  padding: 10px 12px;\n  background: var(--bg-secondary);\n  border-radius: 6px;\n  margin-top: 4px;\n}\n\n.current-task-display h3 {\n  margin: 0;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-primary);\n  line-height: 1.4;\n}\n\n/* Timer Container Adjustments */\n.timer-container {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  padding: 24px;\n  border-radius: 16px;\n  background: var(--bg-primary);\n  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);\n}\n\n.current-focus {\n  margin-bottom: 16px;\n}\n\n.task-input-container {\n  margin-top: 8px;\n}\n\n.task-input {\n  width: 100%;\n  height: 36px;\n  padding: 8px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  background: var(--bg-primary);\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n.current-focus h3 {\n  margin: 8px 0 0 0;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-primary);\n}"],"sourceRoot":""}]);
+}
+
+.stats-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.stat-label {
+  font-weight: bold;
+  color: #333;
+}
+
+.stat-value {
+  color: #007bff;
+}
+
+/* Input Group */
+.input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.task-input {
+  flex: 1;
+  height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--bg-primary);
+  transition: all 0.2s ease;
+}
+
+.task-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-color-alpha);
+}
+
+.break .task-input:focus {
+  border-color: var(--break-color);
+  box-shadow: 0 0 0 2px var(--break-color-alpha);
+}
+
+.add-task-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 6px;
+  background: var(--accent-color);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.add-task-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.add-task-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.break .add-task-btn {
+  background: var(--break-color);
+}
+
+.break .add-task-btn:hover:not(:disabled) {
+  background: var(--break-hover);
+}
+
+/* Focus Next Button */
+.focus-next-btn {
+  width: 100%;
+  padding: 8px 16px;
+  margin-top: 12px;
+  border-radius: 6px;
+  background: var(--accent-color);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.focus-next-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.break .focus-next-btn {
+  background: var(--break-color);
+}
+
+.break .focus-next-btn:hover {
+  background: var(--break-hover);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* Modal Wrapper */
+.modal-wrapper {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 320px;
+  position: relative;
+  z-index: 10000;
+}
+
+/* Modal Header */
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Close Button */
+.icon-btn {
+  padding: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Settings Form */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
+}`, "",{"version":3,"sources":["webpack://./src/styles.css"],"names":[],"mappings":"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","sourcesContent":["/* Root Variables - Tomato & Green Theme */\n:root {\n  /* Core Colors */\n  --bg-primary: #ffffff;\n  --bg-secondary: #fafafa;\n  --text-primary: #1a2b3b;\n  --text-secondary: #697586;\n  --border-color: #e5e7eb;\n  \n  /* Focus Mode - Tomato Theme */\n  --accent-color: #FF6B6B;\n  --accent-hover: #FF5252;\n  --accent-color-alpha: rgba(255, 107, 107, 0.1);\n  --focus-gradient-start: #FFF5F5;\n  --focus-gradient-end: #ffffff;\n  \n  /* Break Mode - Healing Green */\n  --break-color: #4ade80;\n  --break-hover: #22c55e;\n  --break-color-alpha: rgba(74, 222, 128, 0.1);\n  --break-gradient-start: #f0fdf4;\n  --break-gradient-end: #ffffff;\n  \n  /* State Colors */\n  --danger-color: #dc2626;\n  --success-color: #10b981;\n  \n  /* Transitions */\n  --transition-quick: 150ms;\n  --transition-normal: 300ms;\n}\n\n/* Font Imports */\n@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');\n\n/* Base Styles */\nbody {\n  width: 320px;\n  margin: 0;\n  padding: 0;\n  max-height: 600px;\n  min-height: 400px;\n  overflow: hidden;\n  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;\n  -webkit-font-smoothing: antialiased;\n  background: var(--bg-primary);\n}\n\n.app-container {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  padding: 16px;\n  gap: 12px;\n  background: var(--bg-primary);\n}\n\n/* Header Styles */\n.header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin: 0 0 8px 0;\n  padding: 4px 0;\n}\n\n.app-title {\n  font-size: 18px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n.header-controls {\n  display: flex;\n  gap: 8px;\n  align-items: center;\n}\n\n.icon-btn {\n  background: none;\n  border: none;\n  padding: 8px;\n  cursor: pointer;\n  border-radius: 6px;\n  color: var(--text-secondary);\n  transition: all var(--transition-normal);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.icon-btn:hover {\n  background-color: var(--bg-secondary);\n  color: var(--text-primary);\n}\n\n.icon-btn.active {\n  color: var(--accent-color);\n  background-color: var(--accent-color-alpha);\n}\n\n/* Timer Container */\n.timer-container {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  align-items: center;\n  min-height: 200px;\n  margin: 12px 0;\n  padding: 24px;\n  text-align: center;\n  border-radius: 16px;\n  transition: all var(--transition-normal);\n}\n\n.timer-container.focus {\n  background: linear-gradient(\n    145deg,\n    var(--focus-gradient-start) 0%,\n    var(--focus-gradient-end) 100%\n  );\n  border: 1px solid rgba(255, 107, 107, 0.1);\n}\n\n.timer-container.break {\n  background: linear-gradient(\n    145deg,\n    var(--break-gradient-start) 0%,\n    var(--break-gradient-end) 100%\n  );\n  border: 1px solid rgba(74, 222, 128, 0.1);\n}\n\n.timer-container.break::before {\n  background: radial-gradient(\n    circle at center,\n    var(--break-accent-light) 0%,\n    transparent 70%\n  );\n}\n\n.timer-container.paused {\n  opacity: 0.8;\n}\n\n.timer-container.completed {\n  animation: pulseComplete 2s infinite;\n}\n\n.timer-display {\n  font-size: 48px;\n  font-weight: 700;\n  margin: 0;\n  line-height: 1;\n}\n\n.timer-type {\n  margin: 8px 0 16px 0;\n}\n\n/* Button Styles */\n.button-container {\n  margin-top: auto;\n  padding-bottom: 8px;\n  width: 100%;\n}\n\n.primary-button,\n.secondary-button,\n.danger-button {\n  flex: 1;\n  padding: 12px 24px;\n  border-radius: 10px;\n  font-weight: 500;\n  transition: all var(--transition-normal);\n  border: none;\n  cursor: pointer;\n  font-size: 14px;\n}\n\n.primary-button {\n  background: var(--accent-color);\n  color: white;\n}\n\n.primary-button:hover:not(:disabled) {\n  background: var(--accent-hover);\n  transform: translateY(-1px);\n}\n\n.primary-button:disabled {\n  opacity: 0.5;\n  cursor: not-allowed;\n}\n\n.secondary-button {\n  background: var(--bg-secondary);\n  color: var(--text-primary);\n  border: 1px solid var(--border-color);\n}\n\n.secondary-button:hover {\n  background: var(--bg-hover);\n  border-color: var(--text-secondary);\n}\n\n.danger-button {\n  background: var(--danger-color);\n  color: white;\n}\n\n.danger-button:hover {\n  opacity: 0.9;\n  transform: translateY(-1px);\n}\n\n/* Task Input */\n.task-container {\n  margin: 0;\n}\n\n#taskInput,\n.task-input {\n  width: 100%;\n  height: 42px;\n  padding: 0 16px;\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 15px;\n  transition: all var(--transition-quick);\n}\n\n#taskInput:focus,\n.task-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 3px var(--accent-color-alpha);\n  outline: none;\n}\n\n.task-title {\n  font-size: 14px;\n  font-weight: 600;\n  margin: 0;\n  padding: 10px 0;\n  color: var(--text-primary);\n}\n\n/* Stats Panel */\n.stats-panel {\n  margin-top: auto;\n  padding: 12px 0 0 0;\n  border-top: 1px solid var(--border-color);\n}\n\n.break .stats-panel {\n  border-color: var(--break-color-alpha);\n}\n\n.stats-row {\n  display: flex;\n  justify-content: space-between;\n  margin-bottom: 12px;\n}\n\n.stats-item {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  align-items: center;\n  text-align: center;\n}\n\n.stats-label {\n  font-size: 12px;\n  color: var(--text-secondary);\n  font-weight: 500;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.stats-value {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Progress Bar */\n.progress-container {\n  width: 100%;\n  margin-top: 16px;\n}\n\n.progress-bar {\n  width: 100%;\n  height: 4px;\n  background: var(--border-color);\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n.progress-fill {\n  height: 100%;\n  background-color: var(--accent-color);\n  transition: width var(--transition-normal), background-color var(--transition-normal);\n}\n\n.break .progress-fill {\n  background-color: var(--break-color);\n}\n\n/* SubTask Panel */\n.task-panel {\n  background: var(--bg-secondary);\n  border-radius: 12px;\n  padding: 20px;\n  margin-top: 16px;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);\n  transition: all var(--transition-normal);\n}\n\n.task-panel.visible {\n  opacity: 1;\n  transform: translateY(0);\n}\n\n.current-context {\n  margin: 16px 0;\n  padding: 0 0 16px 0;\n  border-bottom: 1px solid var(--border-color);\n}\n\n.current-focus {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.context-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  margin-bottom: 8px;\n}\n\n.current-focus h3 {\n  margin: 0;\n  font-size: 16px;\n  color: var(--text-primary);\n  font-weight: 600;\n}\n\n/* SubTask Form and Categories */\n.task-form {\n  margin-top: 16px;\n  padding: 16px;\n  background: var(--bg-secondary);\n  border-radius: 12px;\n}\n\n.category-selector {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 12px;\n}\n\n.category-btn {\n  flex: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  padding: 8px 16px;\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  background: var(--bg-primary);\n  color: var(--text-secondary);\n  font-size: 13px;\n  transition: all 0.2s ease;\n}\n\n.category-btn .icon {\n  font-size: 14px;\n}\n\n.category-btn:hover {\n  background: var(--bg-secondary);\n  border-color: var(--text-secondary);\n}\n\n.category-btn.active {\n  background: var(--accent-color-alpha);\n  border-color: var(--accent-color);\n  color: var(--accent-color);\n}\n\n.break .category-btn.active {\n  background: var(--break-color-alpha);\n  border-color: var(--break-color);\n  color: var(--break-color);\n}\n\n/* SubTask Cards */\n.tasks-grid {\n  display: grid;\n  gap: 12px;\n  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));\n}\n\n.task-card {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-radius: 10px;\n  padding: 12px;\n  transition: all var(--transition-normal);\n}\n\n.task-card:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);\n}\n\n.task-card.related {\n  border-left: 3px solid var(--accent-color);\n}\n\n.task-card.followUp {\n  border-left: 3px solid var(--break-accent);\n}\n\n.task-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 8px;\n}\n\n.task-text {\n  margin: 0;\n  font-size: 14px;\n  color: var(--text-primary);\n  line-height: 1.4;\n}\n\n/* Modal Styles */\n.settings-modal {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background-color: rgba(0, 0, 0, 0.5);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 1000;\n  backdrop-filter: blur(2px);\n  animation: fadeIn 0.2s ease;\n}\n\n.modal-content {\n  background: var(--bg-primary);\n  border-radius: 12px;\n  padding: 24px;\n  width: 90%;\n  max-width: 320px;\n  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);\n  animation: modalSlideIn 0.2s ease;\n  position: relative;\n  transform-origin: center center;\n}\n\n/* Smooth animations */\n@keyframes fadeIn {\n  from {\n    opacity: 0;\n  }\n  to {\n    opacity: 1;\n  }\n}\n\n@keyframes modalSlideIn {\n  from {\n    opacity: 0;\n    transform: scale(0.95);\n  }\n  to {\n    opacity: 1;\n    transform: scale(1);\n  }\n}\n\n/* Prevent background content shift */\nbody.modal-open {\n  overflow: hidden;\n  padding-right: var(--scrollbar-width);\n}\n\n.modal-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 20px;\n}\n\n.modal-header h3 {\n  font-size: 18px;\n  font-weight: 600;\n  margin: 0;\n}\n\n/* Settings Form */\n.settings-form {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n  padding: 20px 0;\n}\n\n.settings-group {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n\n.settings-group label {\n  font-size: 13px;\n  color: var(--text-secondary);\n  font-weight: 500;\n}\n\n.settings-group input {\n  padding: 8px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all var(--transition-normal);\n}\n\n.settings-group input:focus {\n  outline: none;\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.input-with-unit {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.unit {\n  color: var(--text-secondary);\n  font-size: 13px;\n}\n\n/* Completion Buttons */\n.completion-buttons {\n  display: flex;\n  gap: 12px;\n  width: 100%;\n}\n\n.completion-buttons button {\n  flex: 1;\n}\n\n/* Animations and Keyframes */\n@keyframes pulseComplete {\n  0% { transform: scale(1); }\n  50% { transform: scale(1.02); }\n  100% { transform: scale(1); }\n}\n\n@keyframes fadeIn {\n  from { opacity: 0; }\n  to { opacity: 1; }\n}\n\n@keyframes slideIn {\n  from { transform: translateY(-10px); opacity: 0; }\n  to { transform: translateY(0); opacity: 1; }\n}\n\n@keyframes slideUp {\n  from { transform: translateY(20px); opacity: 0; }\n  to { transform: translateY(0); opacity: 1; }\n}\n\n@keyframes ripple {\n  from {\n    transform: scale(0);\n    opacity: 0.2;\n  }\n  to {\n    transform: scale(2);\n    opacity: 0;\n  }\n}\n\n@keyframes shake {\n  0%, 100% { transform: translateX(0); }\n  25% { transform: translateX(-5px); }\n  75% { transform: translateX(5px); }\n}\n\n/* Utility Classes */\n.error {\n  border-color: var(--danger-color) !important;\n  animation: shake 0.5s ease-in-out;\n}\n\n/* Empty States */\n.empty-tasks {\n  text-align: center;\n  padding: 24px;\n  background: var(--bg-primary);\n  border-radius: 8px;\n  border: 1px dashed var(--border-color);\n}\n\n.empty-tasks p {\n  margin: 0 0 8px 0;\n  color: var(--text-primary);\n  font-weight: 500;\n}\n\n.tip {\n  font-size: 13px;\n  color: var(--text-secondary);\n}\n\n/* Responsive Adjustments */\n@media (max-width: 360px) {\n  body {\n    padding: 12px;\n  }\n\n  .timer-display {\n    font-size: 40px;\n  }\n\n  .tasks-grid {\n    grid-template-columns: 1fr;\n  }\n\n  .break-actions {\n    flex-direction: column;\n  }\n\n  .modal-content {\n    width: 95%;\n    padding: 16px;\n  }\n}\n\n/* Category Tags */\n.category-tag {\n  font-size: 12px;\n  padding: 4px 8px;\n  border-radius: 4px;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n}\n\n.category-tag.related {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n}\n\n.category-tag.followUp {\n  background: var(--break-accent-light);\n  color: var(--break-accent);\n}\n\n/* Focus States */\n*:focus-visible {\n  outline: 2px solid var(--accent-color);\n  outline-offset: 2px;\n}\n\n/* Timer Type Indicator */\n.timer-type {\n  font-size: 14px;\n  font-weight: 500;\n  margin-top: 8px;\n  transition: color var(--transition-normal);\n}\n\n.break .timer-type {\n  color: var(--break-color);\n}\n\n.focus .timer-type {\n  color: var(--accent-color);\n}\n\n/* Timer Display */\n.timer-display {\n  font-size: 48px;\n  font-weight: 700;\n  transition: color var(--transition-normal);\n}\n\n.focus .timer-display {\n  color: var(--accent-color);\n}\n\n.break .timer-display {\n  color: var(--break-color);\n}\n\n/* Completion Animations */\n.timer-container.completed.focus {\n  animation: completePulseFocus 2s infinite;\n}\n\n.timer-container.completed.break {\n  animation: completePulseBreak 2s infinite;\n}\n\n@keyframes completePulseFocus {\n  0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.2); }\n  70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }\n  100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }\n}\n\n@keyframes completePulseBreak {\n  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.2); }\n  70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }\n  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }\n}\n\n/* Responsive Height Adjustments */\n@media (max-height: 500px) {\n  .timer-container {\n    min-height: 160px;\n    padding: 16px;\n  }\n  \n  .timer-display {\n    font-size: 40px;\n  }\n  \n  .button-container {\n    padding-bottom: 4px;\n  }\n}\n\n/* Scrollbar Styling */\n::-webkit-scrollbar {\n  width: 8px;\n}\n\n::-webkit-scrollbar-track {\n  background: var(--bg-secondary);\n  border-radius: 4px;\n}\n\n::-webkit-scrollbar-thumb {\n  background: var(--border-color);\n  border-radius: 4px;\n}\n\n::-webkit-scrollbar-thumb:hover {\n  background: var(--text-secondary);\n}\n\n/* Timer Display Refinements */\n.timer-display {\n  font-size: 64px;\n  font-weight: 700;\n  line-height: 1;\n  margin: 0;\n  background: linear-gradient(\n    to bottom,\n    var(--text-primary) 0%,\n    var(--text-secondary) 120%\n  );\n  -webkit-background-clip: text;\n  -webkit-text-fill-color: transparent;\n  transition: all var(--transition-normal);\n}\n\n/* Timer Container Enhancements */\n.timer-container {\n  position: relative;\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  border: 1px solid transparent;\n}\n\n.timer-container::before {\n  content: '';\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  padding: 1px;\n  background: linear-gradient(\n    to bottom right,\n    var(--accent-color),\n    transparent\n  );\n  -webkit-mask: \n    linear-gradient(#fff 0 0) content-box, \n    linear-gradient(#fff 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  opacity: 0;\n  transition: opacity 0.3s ease;\n}\n\n.timer-container:hover::before {\n  opacity: 1;\n}\n\n/* Break Mode Styles */\n.timer-container.break::before {\n  background: linear-gradient(\n    to bottom right,\n    var(--break-color),\n    transparent\n  );\n}\n\n/* Task Input Enhancement */\n.task-input {\n  transform: translateY(0);\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  transform: translateY(-1px);\n}\n\n/* Button Enhancements */\n.primary-button {\n  position: relative;\n  overflow: hidden;\n  transition: all 0.2s ease;\n}\n\n.primary-button::after {\n  content: '';\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  background: linear-gradient(\n    to right,\n    transparent,\n    rgba(255, 255, 255, 0.2),\n    transparent\n  );\n  transform: translateX(-100%);\n}\n\n.primary-button:hover::after {\n  transform: translateX(100%);\n  transition: transform 0.6s ease;\n}\n\n/* Mode Indicator */\n.mode-indicator {\n  position: absolute;\n  top: 12px;\n  right: 12px;\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  background: var(--accent-color);\n  transition: all 0.3s ease;\n}\n\n.break .mode-indicator {\n  background: var(--break-color);\n}\n\n/* Timer Type Refinements */\n.timer-type {\n  position: relative;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-secondary);\n  margin-top: 12px;\n  transition: all 0.3s ease;\n}\n\n.timer-type::after {\n  content: '';\n  position: absolute;\n  bottom: -4px;\n  left: 50%;\n  transform: translateX(-50%);\n  width: 0;\n  height: 2px;\n  background: var(--accent-color);\n  transition: width 0.3s ease;\n}\n\n.break .timer-type::after {\n  background: var(--break-color);\n}\n\n.timer-container:hover .timer-type::after {\n  width: 100%;\n}\n\n/* Loading State */\n.app-container.loading {\n  justify-content: center;\n}\n\n.loading .timer-container {\n  animation: shimmer 1.5s infinite;\n  background: linear-gradient(\n    90deg,\n    var(--bg-secondary) 0%,\n    var(--bg-primary) 50%,\n    var(--bg-secondary) 100%\n  );\n  background-size: 200% 100%;\n}\n\n@keyframes shimmer {\n  0% { background-position: -200% 0; }\n  100% { background-position: 200% 0; }\n}\n\n/* Responsive Adjustments */\n@media screen and (max-height: 500px) {\n  .timer-display {\n    font-size: 48px;\n  }\n  \n  .timer-container {\n    min-height: 160px;\n    padding: 16px;\n  }\n  \n  .button-container {\n    padding-bottom: 4px;\n  }\n}\n\n/* Input Standardization */\n.task-input, #taskInput, .task-input {\n  width: calc(100% - 24px);\n  padding: 10px 12px;\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 14px;\n  line-height: 1.4;\n  transition: all var(--transition-normal);\n  background: var(--bg-primary);\n  color: var(--text-primary);\n}\n\n.task-input:focus, #taskInput:focus, .task-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 3px var(--accent-color-alpha);\n  outline: none;\n  transform: translateY(-1px);\n}\n\n/* Category Tag Refinements */\n.category-tag {\n  font-size: 12px;\n  padding: 4px 8px;\n  border-radius: 6px;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  font-weight: 500;\n}\n\n.category-tag .icon {\n  font-size: 14px;\n}\n\n/* Stats Panel Layout */\n.stats-panel {\n  padding: 16px;\n  margin-top: 16px;\n  border-top: 1px solid var(--border-color);\n  display: flex;\n  justify-content: space-around;\n}\n\n.stats-item {\n  min-width: 80px;\n  padding: 0 8px;\n  text-align: center;\n}\n\n.stats-label {\n  font-size: 12px;\n  letter-spacing: 0.5px;\n  text-transform: uppercase;\n  color: var(--text-secondary);\n  margin-bottom: 4px;\n}\n\n.stats-value {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Progress Bar Refinements */\n.progress-container {\n  margin-top: 16px;\n  padding-top: 8px;\n  width: 100%;\n}\n\n.progress-label {\n  font-size: 12px;\n  color: var(--text-secondary);\n  margin-bottom: 6px;\n  display: flex;\n  justify-content: space-between;\n}\n\n/* Button State Colors */\n.timer-container.break ~ .button-container .primary-button {\n  background: var(--break-color);\n}\n\n.timer-container.break ~ .button-container .primary-button:hover:not(:disabled) {\n  background: var(--break-hover);\n}\n\n/* Completion States */\n.timer-container.completed {\n  background: var(--break-gradient-start);\n}\n\n.timer-container.completed.focus {\n  background: var(--focus-gradient-start);\n}\n\n.timer-container.completed.break {\n  background: var(--break-gradient-start);\n}\n\n/* Break Mode Button States */\n.break .primary-button {\n  background: var(--break-color);\n}\n\n.break .primary-button:hover:not(:disabled) {\n  background: var(--break-hover);\n}\n\n.break .primary-button:disabled {\n  background: var(--break-color);\n  opacity: 0.5;\n}\n\n/* Focus Mode Button States */\n.focus .primary-button {\n  background: var(--accent-color);\n}\n\n.focus .primary-button:hover:not(:disabled) {\n  background: var(--accent-hover);\n}\n\n.focus .primary-button:disabled {\n  background: var(--accent-color);\n  opacity: 0.5;\n}\n\n/* Input Group */\n.input-group {\n  display: flex;\n  gap: 8px;\n  margin-top: 12px;\n}\n\n.task-input {\n  flex: 1;\n  height: 40px;\n  padding: 8px 16px;\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 14px;\n  transition: all var(--transition-normal);\n}\n\n.add-task-btn {\n  min-width: 100px;\n  height: 40px;\n  padding: 0 20px;\n  border-radius: 8px;\n  border: none;\n  background: var(--accent-color);\n  color: white;\n  font-size: 14px;\n  font-weight: 500;\n  cursor: pointer;\n  transition: all var(--transition-normal);\n}\n\n.break .add-task-btn {\n  background: var(--break-color);\n}\n\n/* Category Selection */\n.category-selector {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 12px;\n}\n\n.category-btn {\n  flex: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  padding: 8px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 8px;\n  background: var(--bg-primary);\n  color: var(--text-secondary);\n  font-size: 13px;\n  cursor: pointer;\n  transition: all 0.2s ease;\n}\n\n.category-btn .icon {\n  font-size: 16px;\n}\n\n.category-btn.active {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n  border-color: var(--accent-color);\n}\n\n.break .category-btn.active {\n  background: var(--break-color-alpha);\n  color: var(--break-color);\n  border-color: var(--break-color);\n}\n\n/* Category Tags */\n.category-tag {\n  display: inline-flex;\n  align-items: center;\n  padding: 4px 8px;\n  border-radius: 6px;\n  font-size: 12px;\n  font-weight: 500;\n}\n\n.category-tag.related {\n  background: var(--accent-color-alpha);\n  color: var(--accent-color);\n}\n\n.category-tag.followUp {\n  background: var(--break-color-alpha);\n  color: var(--break-color);\n}\n\n/* Task Cards */\n.task-card {\n  background: var(--bg-primary);\n  border: 1px solid var(--border-color);\n  border-radius: 10px;\n  padding: 12px;\n  transition: all var(--transition-normal);\n}\n\n.task-card:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);\n}\n\n/* Card Components */\n.task-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 8px;\n}\n\n.capture-time {\n  font-size: 12px;\n  color: var(--text-secondary);\n}\n\n/* Focus Next Button */\n.focus-next-btn {\n  margin-top: 12px;\n  width: 100%;\n  padding: 8px;\n  background: none;\n  border: 1px solid var(--accent-color);\n  color: var(--accent-color);\n  border-radius: 6px;\n  font-size: 13px;\n  cursor: pointer;\n  transition: all var(--transition-normal);\n}\n\n.break .focus-next-btn {\n  border-color: var(--break-color);\n  color: var(--break-color);\n}\n\n.focus-next-btn:hover {\n  background: var(--accent-color);\n  color: white;\n}\n\n.break .focus-next-btn:hover {\n  background: var(--break-color);\n  color: white;\n}\n\n/* Break Duration Display */\n.break-duration {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 14px;\n  color: var(--break-color);\n  background: var(--break-color-alpha);\n  padding: 4px 8px;\n  border-radius: 6px;\n  margin-left: 8px;\n}\n\n.break-duration-icon {\n  font-size: 16px;\n}\n\n/* Updated Task Section Styles */\n.task-section {\n  margin: 16px 0;\n  padding: 0 12px;\n  animation: slideIn 0.3s ease;\n}\n\n.section-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  margin-bottom: 8px;\n}\n\n.task-input-container {\n  position: relative;\n}\n\n.task-input {\n  width: 100%;\n  padding: 10px 12px;\n  background: var(--bg-primary);\n  border: 2px solid var(--border-color);\n  border-radius: 8px;\n  font-size: 14px;\n  transition: all var(--transition-normal);\n}\n\n.task-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 3px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 3px var(--break-color-alpha);\n}\n\n.current-task-display {\n  padding: 10px;\n  background: var(--bg-secondary);\n  border-radius: 8px;\n  transition: all var(--transition-normal);\n  animation: slideIn 0.3s ease;\n}\n\n.current-task-display h3 {\n  margin: 0;\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Stats Display Improvements */\n.stats-panel {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 16px;\n  padding: 16px;\n  margin-top: 20px;\n  background: var(--bg-secondary);\n  border-radius: 12px;\n}\n\n.stats-item {\n  text-align: center;\n}\n\n.stats-value {\n  font-size: 24px;\n  font-weight: 600;\n  color: var(--text-primary);\n  margin-bottom: 4px;\n}\n\n.stats-label {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 1px;\n  color: var(--text-secondary);\n}\n\n/* Progress Bar Refinements */\n.progress-container {\n  margin-top: 16px;\n  padding-top: 8px;\n  border-top: 1px solid var(--border-color);\n}\n\n.progress-label {\n  font-size: 12px;\n  color: var(--text-secondary);\n  margin-bottom: 8px;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n}\n\n.progress-bar {\n  height: 6px;\n  background: var(--bg-primary);\n  border-radius: 3px;\n  overflow: hidden;\n}\n\n.progress-fill {\n  height: 100%;\n  background: var(--accent-color);\n  transition: width 0.6s ease;\n}\n\n.break .progress-fill {\n  background: var(--break-color);\n}\n\n/* Animation Improvements */\n@keyframes slideIn {\n  from {\n    opacity: 0;\n    transform: translateY(-8px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n\n/* Mode Transitions */\n.mode-transition {\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n}\n\n.mode-transition.break {\n  --accent-color: var(--break-color);\n  --accent-hover: var(--break-hover);\n  --accent-color-alpha: var(--break-color-alpha);\n}\n\n/* Cohesive Timer and Stats Area */\n.timer-container {\n  background: var(--bg-primary);\n  border-radius: 16px;\n  padding: 24px;\n  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);\n  margin-bottom: 0;\n}\n\n/* Current Task Section */\n.current-task-section {\n  margin: 16px 0;\n  padding: 0 0 16px 0;\n  border-bottom: 1px solid var(--border-color);\n}\n\n.section-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  margin-bottom: 8px;\n}\n\n.task-input-wrapper {\n  position: relative;\n}\n\n.task-input {\n  width: 100%;\n  height: 36px;\n  padding: 8px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  background: var(--bg-primary);\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n/* Unified Stats Panel */\n.stats-panel {\n  margin-top: 16px;\n  padding: 16px;\n  border-top: 1px solid var(--border-color);\n  background: transparent;\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 12px;\n}\n\n.stats-item {\n  text-align: center;\n}\n\n.stats-value {\n  font-size: 20px;\n  font-weight: 600;\n  color: var(--text-primary);\n  margin-bottom: 4px;\n}\n\n.stats-label {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n\n/* Progress Bar */\n.progress-container {\n  margin-top: 16px;\n  padding-top: 12px;\n  border-top: 1px solid var(--border-color);\n}\n\n/* Subtask Refinements */\n.task-input {\n  height: 36px;\n  font-size: 13px;\n  padding: 8px 12px;\n}\n\n.add-task-btn {\n  height: 36px;\n  padding: 0 16px;\n  font-size: 13px;\n}\n\n/* Input Placeholders */\n.task-input::placeholder {\n  opacity: 0.6;\n  text-overflow: ellipsis;\n}\n\n/* Current Task Display */\n.current-task {\n  padding: 10px 12px;\n  background: var(--bg-secondary);\n  border-radius: 6px;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-primary);\n  transition: all 0.2s ease;\n}\n\n/* Responsive Adjustments */\n@media screen and (max-height: 500px) {\n  .timer-container {\n    padding: 16px;\n  }\n  \n  .current-task-section {\n    margin: 12px 0;\n    padding: 0 0 12px 0;\n  }\n  \n  .stats-panel {\n    padding: 12px;\n    gap: 8px;\n  }\n  \n  .stats-value {\n    font-size: 18px;\n  }\n}\n\n/* Task Section in Timer */\n.task-section {\n  margin: 16px 0;\n  padding: 0 0 16px 0;\n  border-bottom: 1px solid var(--border-color);\n}\n\n.context-label {\n  display: block;\n  font-size: 12px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n  margin-bottom: 8px;\n}\n\n.task-input-container {\n  position: relative;\n}\n\n.task-input {\n  width: 100%;\n  height: 36px;\n  padding: 8px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  background: var(--bg-primary);\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n.current-task-display {\n  padding: 10px 12px;\n  background: var(--bg-secondary);\n  border-radius: 6px;\n  margin-top: 4px;\n}\n\n.current-task-display h3 {\n  margin: 0;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-primary);\n  line-height: 1.4;\n}\n\n/* Timer Container Adjustments */\n.timer-container {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  padding: 24px;\n  border-radius: 16px;\n  background: var(--bg-primary);\n  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);\n}\n\n.current-focus {\n  margin-bottom: 16px;\n}\n\n.task-input-container {\n  margin-top: 8px;\n}\n\n.task-input {\n  width: 100%;\n  height: 36px;\n  padding: 8px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 14px;\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  background: var(--bg-primary);\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n.current-focus h3 {\n  margin: 8px 0 0 0;\n  font-size: 14px;\n  font-weight: 500;\n  color: var(--text-primary);\n}\n\n.stats-summary {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  margin-top: 16px;\n  background: #f5f5f5;\n  padding: 12px;\n  border-radius: 8px;\n  text-align: center;\n}\n\n.stat-item {\n  display: flex;\n  justify-content: space-between;\n}\n\n.stat-label {\n  font-weight: bold;\n  color: #333;\n}\n\n.stat-value {\n  color: #007bff;\n}\n\n/* Input Group */\n.input-group {\n  display: flex;\n  gap: 8px;\n}\n\n.task-input {\n  flex: 1;\n  height: 36px;\n  padding: 8px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 6px;\n  font-size: 13px;\n  background: var(--bg-primary);\n  transition: all 0.2s ease;\n}\n\n.task-input:focus {\n  border-color: var(--accent-color);\n  box-shadow: 0 0 0 2px var(--accent-color-alpha);\n}\n\n.break .task-input:focus {\n  border-color: var(--break-color);\n  box-shadow: 0 0 0 2px var(--break-color-alpha);\n}\n\n.add-task-btn {\n  height: 36px;\n  padding: 0 16px;\n  border-radius: 6px;\n  background: var(--accent-color);\n  color: white;\n  font-size: 13px;\n  font-weight: 500;\n  transition: all 0.2s ease;\n}\n\n.add-task-btn:hover:not(:disabled) {\n  background: var(--accent-hover);\n}\n\n.add-task-btn:disabled {\n  opacity: 0.5;\n  cursor: not-allowed;\n}\n\n.break .add-task-btn {\n  background: var(--break-color);\n}\n\n.break .add-task-btn:hover:not(:disabled) {\n  background: var(--break-hover);\n}\n\n/* Focus Next Button */\n.focus-next-btn {\n  width: 100%;\n  padding: 8px 16px;\n  margin-top: 12px;\n  border-radius: 6px;\n  background: var(--accent-color);\n  color: white;\n  font-size: 13px;\n  font-weight: 500;\n  transition: all 0.2s ease;\n}\n\n.focus-next-btn:hover {\n  background: var(--accent-hover);\n  transform: translateY(-1px);\n}\n\n.break .focus-next-btn {\n  background: var(--break-color);\n}\n\n.break .focus-next-btn:hover {\n  background: var(--break-hover);\n}\n\n/* Modal Overlay */\n.modal-overlay {\n  position: fixed;\n  inset: 0;\n  background-color: rgba(0, 0, 0, 0.5);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 9999;\n}\n\n/* Modal Wrapper */\n.modal-wrapper {\n  background: var(--bg-primary);\n  border-radius: 12px;\n  padding: 24px;\n  width: 90%;\n  max-width: 320px;\n  position: relative;\n  z-index: 10000;\n}\n\n/* Modal Header */\n.modal-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 20px;\n}\n\n.modal-header h3 {\n  margin: 0;\n  font-size: 18px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n\n/* Close Button */\n.icon-btn {\n  padding: 8px;\n  background: transparent;\n  border: none;\n  cursor: pointer;\n  border-radius: 6px;\n  color: var(--text-secondary);\n  transition: all 0.2s ease;\n}\n\n.icon-btn:hover {\n  background: var(--bg-secondary);\n  color: var(--text-primary);\n}\n\n/* Settings Form */\n.settings-form {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n}\n\n/* Prevent body scroll when modal is open */\nbody.modal-open {\n  overflow: hidden;\n}"],"sourceRoot":""}]);
 // Exports
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
 

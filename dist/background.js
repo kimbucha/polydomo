@@ -30,23 +30,33 @@ var state = {
   }
 };
 
-// Load saved state on startup
-chrome.storage.local.get(['state', 'settings'], function (data) {
-  if (data.state) {
-    state = _objectSpread(_objectSpread({}, state), data.state);
+// Initial state with default settings
+var defaultState = {
+  timeLeft: 1500,
+  // 25 minutes
+  isRunning: false,
+  isBreak: false,
+  isCompleted: false,
+  settings: {
+    focusDuration: 25,
+    breakDuration: 5,
+    dailyGoal: 8
+  },
+  stats: {
+    focusMinutes: 0,
+    completedPomodoros: 0,
+    currentStreak: 0
   }
-  if (data.settings) {
-    state.settings = data.settings;
-    state.timeLeft = state.settings.focusDuration * 60;
-  }
+};
 
-  // Reset all running states on browser restart
-  state.isRunning = false;
-  state.isBreak = false;
-  state.isCompleted = false;
-  state.currentTask = ''; // Reset current task
-  updateIcon();
-  saveState();
+// Load state from storage or use defaults
+chrome.storage.local.get(['timerState'], function (result) {
+  state = result.timerState || defaultState;
+  // Ensure timeLeft matches current settings
+  if (!state.isRunning) {
+    state.timeLeft = state.isBreak ? state.settings.breakDuration * 60 : state.settings.focusDuration * 60;
+  }
+  broadcastState();
 });
 
 // Timer control functions
@@ -119,7 +129,7 @@ var handleTimerComplete = function handleTimerComplete() {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/break_complete_icon.png',
-      title: 'Break Complete',
+      title: 'Break Complete! 🔄',
       message: "Ready for a ".concat(state.settings.focusDuration, "-minute focus session?"),
       requireInteraction: true
     });

@@ -9,11 +9,14 @@ export const Timer = ({
     focusMinutes: 0,
     completedPomodoros: 0,
     currentStreak: 0
-  }
+  },
+  settings
 }) => {
   const formatTime = (seconds) => {
     if (typeof seconds !== 'number' || isNaN(seconds)) {
-      return '25:00';
+      return isBreak ? 
+        `${settings.breakDuration}:00` : 
+        `${settings.focusDuration}:00`;
     }
     const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
@@ -22,7 +25,7 @@ export const Timer = ({
 
   const getStateText = () => {
     if (isCompleted) {
-      return isBreak ? 'Break Complete!' : 'Session Complete!';
+      return isBreak ? 'Break Complete!' : 'Focus Session Complete!';
     }
     if (isBreak) {
       return isRunning ? 'Break Time' : 'Take a Break';

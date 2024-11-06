@@ -1,16 +1,25 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export const SettingsModal = ({ settings, onSave, onClose }) => {
   const [localSettings, setLocalSettings] = React.useState(settings);
+  const modalRef = useRef(null);
 
-  const handleSave = () => {
-    onSave(localSettings);
-    onClose();
-  };
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
 
   return (
-    <div className="settings-modal">
-      <div className="modal-content">
+    <div className="modal-overlay">
+      <div className="modal-wrapper" ref={modalRef}>
         <div className="modal-header">
           <h3>Settings</h3>
           <button className="icon-btn" onClick={onClose}>
