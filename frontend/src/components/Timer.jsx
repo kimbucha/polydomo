@@ -1,0 +1,88 @@
+import React from 'react';
+
+export const Timer = ({ 
+  timeLeft, 
+  isBreak, 
+  isRunning,
+  isCompleted,
+  stats = {
+    focusMinutes: 0,
+    completedPomodoros: 0,
+    currentStreak: 0
+  },
+  settings
+}) => {
+  const formatTime = (seconds) => {
+    if (typeof seconds !== 'number' || isNaN(seconds)) {
+      return isBreak ? 
+        `${settings.breakDuration}:00` : 
+        `${settings.focusDuration}:00`;
+    }
+    const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${minutes}:${secs}`;
+  };
+
+  const getStateText = () => {
+    if (isCompleted) {
+      return isBreak ? 'Break Complete!' : 'Focus Session Complete!';
+    }
+    if (isBreak) {
+      return isRunning ? 'Break Time' : 'Take a Break';
+    }
+    return isRunning ? 'Focusing' : 'Ready to Focus';
+  };
+
+  return (
+    <div 
+      className={`timer-container ${isBreak ? 'break' : 'focus'} ${
+        isCompleted ? 'completed' : !isRunning ? 'paused' : ''
+      }`}
+      role="timer"
+      aria-label={`${isBreak ? 'Break' : 'Focus'} Timer`}
+    >
+      <div className="timer-content">
+        <div className="timer-display">{formatTime(timeLeft)}</div>
+        <div className="timer-type">
+          {isBreak ? 'Break Time' : isCompleted ? 'Session Complete' : 'Focus Time'}
+        </div>
+        
+        {/* Stats Panel - Shown after completion or during break */}
+        {(isCompleted || isBreak) && (
+          <div className="stats-panel">
+            <div className="stats-grid">
+              <div className="stats-item">
+                <span className="stats-value">{stats.focusMinutes}m</span>
+                <span className="stats-label">Focus Time</span>
+              </div>
+              <div className="stats-item">
+                <span className="stats-value">{stats.completedPomodoros}</span>
+                <span className="stats-label">Sessions</span>
+              </div>
+              <div className="stats-item">
+                <span className="stats-value">{stats.currentStreak}🔥</span>
+                <span className="stats-label">Streak</span>
+              </div>
+            </div>
+            
+            <div className="progress-container">
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ 
+                    width: `${(stats.completedPomodoros / settings.dailyGoal) * 100}%`
+                  }} 
+                />
+              </div>
+              <div className="progress-label">
+                Daily Goal: {stats.completedPomodoros}/{settings.dailyGoal}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Timer;

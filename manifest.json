@@ -1,0 +1,15 @@
+{
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://api.resend.com/*"
+  ],
+  "minimum_chrome_version": "92"
+} 

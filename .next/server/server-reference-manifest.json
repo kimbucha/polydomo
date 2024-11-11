@@ -1,0 +1,22 @@
+{
+  "node": {
+    "1faa46c07b131e85c2cd75e670a4163aa6cb75f4": {
+      "workers": {
+        "app/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmona%2Fcode%2Fwhattuan%2Factions%2FsendEmail.ts%22%2C%5B%22%24%24ACTION_0%22%2C%22sendEmail%22%5D%5D%5D&__client_imported__=true!"
+      },
+      "layer": {
+        "app/page": "action-browser"
+      }
+    },
+    "984289c0fadbd2d211b1cd095d7cfb8c7bd137af": {
+      "workers": {
+        "app/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmona%2Fcode%2Fwhattuan%2Factions%2FsendEmail.ts%22%2C%5B%22%24%24ACTION_0%22%2C%22sendEmail%22%5D%5D%5D&__client_imported__=true!"
+      },
+      "layer": {
+        "app/page": "action-browser"
+      }
+    }
+  },
+  "edge": {},
+  "encryptionKey": "a4RDQsCJKsn68+jIgCV5dImZk7NkI/LQ/turN28PdHk="
+}
