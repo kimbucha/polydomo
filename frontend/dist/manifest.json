@@ -14,12 +14,20 @@
   },
   "background": {
     "service_worker": "background.js",
-    "type": "module",
-    "persistent": false
+    "type": "module"
   },
   "permissions": [
     "storage",
     "notifications",
-    "alarms"
-  ]
+    "alarms",
+    "action",
+    "windows"
+  ],
+  "web_accessible_resources": [{
+    "resources": ["icons/*", "sounds/*"],
+    "matches": ["<all_urls>"]
+  }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

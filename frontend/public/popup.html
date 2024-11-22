@@ -4,9 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Polydomo</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.error('Error:', msg, '\nURL:', url, '\nLine:', lineNo, '\nColumn:', columnNo, '\nError:', error);
+      return false;
+    };
+  </script>
+  <script src="vendor-react.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

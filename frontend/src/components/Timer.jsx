@@ -1,86 +1,106 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import classNames from 'classnames';
 
 export const Timer = ({ 
   timeLeft, 
   isBreak, 
   isRunning,
-  isCompleted,
-  stats = {
-    focusMinutes: 0,
-    completedPomodoros: 0,
-    currentStreak: 0
-  },
-  settings
+  onComplete,
+  settings,
+  currentTask 
 }) => {
+  const [showBreakPrompt, setShowBreakPrompt] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  
+  // Handle state transitions
+  useEffect(() => {
+    if (isRunning || timeLeft === 0) {
+      setIsTransitioning(true);
+      const timer = setTimeout(() => setIsTransitioning(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isRunning, timeLeft]);
+
+  // Calculate progress percentage
+  const progress = timeLeft / (isBreak ? settings.breakDuration : settings.focusDuration);
+  
+  const timerClasses = classNames('timer-container', {
+    'break': isBreak,
+    'focus': !isBreak,
+    'running': isRunning,
+    'completed': timeLeft === 0,
+    'transitioning': isTransitioning
+  });
+
   const formatTime = (seconds) => {
     if (typeof seconds !== 'number' || isNaN(seconds)) {
       return isBreak ? 
-        `${settings.breakDuration}:00` : 
-        `${settings.focusDuration}:00`;
+        `${settings?.breakDuration || 5}:00` : 
+        `${settings?.focusDuration || 25}:00`;
     }
     const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
     return `${minutes}:${secs}`;
   };
 
-  const getStateText = () => {
-    if (isCompleted) {
-      return isBreak ? 'Break Complete!' : 'Focus Session Complete!';
-    }
-    if (isBreak) {
-      return isRunning ? 'Break Time' : 'Take a Break';
-    }
-    return isRunning ? 'Focusing' : 'Ready to Focus';
-  };
-
   return (
-    <div 
-      className={`timer-container ${isBreak ? 'break' : 'focus'} ${
-        isCompleted ? 'completed' : !isRunning ? 'paused' : ''
-      }`}
-      role="timer"
-      aria-label={`${isBreak ? 'Break' : 'Focus'} Timer`}
-    >
-      <div className="timer-content">
-        <div className="timer-display">{formatTime(timeLeft)}</div>
-        <div className="timer-type">
-          {isBreak ? 'Break Time' : isCompleted ? 'Session Complete' : 'Focus Time'}
-        </div>
-        
-        {/* Stats Panel - Shown after completion or during break */}
-        {(isCompleted || isBreak) && (
-          <div className="stats-panel">
-            <div className="stats-grid">
-              <div className="stats-item">
-                <span className="stats-value">{stats.focusMinutes}m</span>
-                <span className="stats-label">Focus Time</span>
-              </div>
-              <div className="stats-item">
-                <span className="stats-value">{stats.completedPomodoros}</span>
-                <span className="stats-label">Sessions</span>
-              </div>
-              <div className="stats-item">
-                <span className="stats-value">{stats.currentStreak}🔥</span>
-                <span className="stats-label">Streak</span>
-              </div>
-            </div>
-            
-            <div className="progress-container">
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
-                  style={{ 
-                    width: `${(stats.completedPomodoros / settings.dailyGoal) * 100}%`
-                  }} 
-                />
-              </div>
-              <div className="progress-label">
-                Daily Goal: {stats.completedPomodoros}/{settings.dailyGoal}
-              </div>
-            </div>
-          </div>
+    <div className={timerClasses}>
+      <div className="timer-type">
+        <span className="timer-label">
+          {isBreak ? 'Break Time' : 'Focus Time'}
+        </span>
+        {currentTask && (
+          <span className="current-task-label">{currentTask}</span>
         )}
       </div>
+
+      <div className="timer-display">
+        {formatTime(timeLeft)}
+      </div>
+
+      <div className="progress-circle">
+        <svg viewBox="0 0 100 100">
+          <circle 
+            className="progress-background"
+            cx="50" cy="50" r="45"
+          />
+          <circle 
+            className="progress-indicator"
+            cx="50" cy="50" r="45"
+            style={{
+              strokeDasharray: `${2 * Math.PI * 45}`,
+              strokeDashoffset: `${(1 - progress) * 2 * Math.PI * 45}`
+            }}
+          />
+        </svg>
+      </div>
+
+      {showBreakPrompt && (
+        <div className="completion-prompt">
+          <h3>Focus Session Complete!</h3>
+          <p>Great work! Time for a break?</p>
+          <div className="prompt-actions">
+            <button 
+              className="primary-button"
+              onClick={() => {
+                setShowBreakPrompt(false);
+                onComplete(true);
+              }}
+            >
+              Start Break
+            </button>
+            <button 
+              className="secondary-button"
+              onClick={() => {
+                setShowBreakPrompt(false);
+                onComplete(false);
+              }}
+            >
+              Skip Break
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
