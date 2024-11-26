@@ -1,104 +1,95 @@
-// components/StatsDisplay.jsx
 import React from 'react';
-import { LineChart, BarChart } from './charts';
 
-export const StatsDisplay = ({ stats, isVisible }) => {
-  if (!isVisible) return null;
+export const StatsDisplay = ({ stats, currentTask, onStartBreak, onNewSession }) => {
+  // Ensure safe defaults for all stats
+  const safeStats = {
+    today: {
+      pomodoros: 0,
+      totalFocusMinutes: 0,
+      ...stats?.today
+    },
+    streaks: {
+      current: 0,
+      ...stats?.streaks
+    },
+    dailyGoal: stats?.dailyGoal ?? 8
+  };
 
   return (
-    <div className="stats-display">
-      <div className="stats-summary">
-        <div className="stat-card today">
-          <h3>Today</h3>
-          <div className="stat-grid">
-            <StatItem 
-              value={stats.today.pomodoros} 
-              label="Focus Sessions"
-              icon="🎯"
-            />
-            <StatItem 
-              value={`${stats.today.totalFocusMinutes}m`} 
-              label="Total Focus Time"
-              icon="⏱️"
-            />
-            <StatItem 
-              value={stats.streaks.current} 
-              label="Day Streak"
-              icon="🔥"
-            />
+    <div className="stats-display-container">
+      <div className="stats-header">
+        <div className="completion-icon">✨</div>
+        <h2 className="stats-title">Session Complete!</h2>
+        {currentTask && (
+          <div className="completed-task-display">
+            <span className="task-label">Task Completed:</span>
+            <span className="task-name">{currentTask}</span>
           </div>
+        )}
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon">🎯</div>
+          <div className="stat-value">{safeStats.today.pomodoros}</div>
+          <div className="stat-label">Today's Sessions</div>
         </div>
-        
-        <div className="stat-card progress">
-          <h3>Daily Goal</h3>
-          <div className="goal-progress">
-            <div className="progress-ring">
-              <svg width="120" height="120">
-                <circle
-                  className="progress-ring__circle progress-ring__circle--bg"
-                  cx="60"
-                  cy="60"
-                  r="52"
-                />
-                <circle
-                  className="progress-ring__circle progress-ring__circle--fg"
-                  cx="60"
-                  cy="60"
-                  r="52"
-                  style={{
-                    strokeDashoffset: calculateProgress(
-                      stats.today.pomodoros,
-                      stats.dailyGoal
-                    )
-                  }}
-                />
-              </svg>
-              <div className="progress-center">
-                <span className="progress-number">
-                  {stats.today.pomodoros}/{stats.dailyGoal}
-                </span>
-                <span className="progress-label">sessions</span>
-              </div>
-            </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">🔥</div>
+          <div className="stat-value">{safeStats.streaks.current}</div>
+          <div className="stat-label">Day Streak</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">⏱️</div>
+          <div className="stat-value">{safeStats.today.totalFocusMinutes}m</div>
+          <div className="stat-label">Total Focus Time</div>
+        </div>
+      </div>
+
+      <div className="daily-progress">
+        <h3 className="progress-title">Daily Goal Progress</h3>
+        <div className="progress-ring-container">
+          <svg viewBox="0 0 100 100">
+            <circle
+              className="progress-ring-bg"
+              cx="50"
+              cy="50"
+              r="45"
+            />
+            <circle
+              className="progress-ring-progress"
+              cx="50"
+              cy="50"
+              r="45"
+              strokeDashoffset={
+                283 * (1 - (safeStats.today.pomodoros / safeStats.dailyGoal))
+              }
+            />
+          </svg>
+          <div className="progress-text">
+            <span className="current">{safeStats.today.pomodoros}</span>
+            <span className="separator">/</span>
+            <span className="goal">{safeStats.dailyGoal}</span>
           </div>
         </div>
       </div>
 
-      <div className="stats-charts">
-        <div className="chart-container">
-          <h3>Weekly Progress</h3>
-          <BarChart 
-            data={stats.weeklyData}
-            height={200}
-            valueKey="pomodoros"
-            color="var(--focus-accent)"
-          />
-        </div>
-        
-        <div className="chart-container">
-          <h3>Focus Time Trend</h3>
-          <LineChart 
-            data={stats.monthlyData}
-            height={200}
-            valueKey="totalFocusMinutes"
-            color="var(--break-accent)"
-          />
-        </div>
+      <div className="action-buttons">
+        <button 
+          className="action-button break-button"
+          onClick={onStartBreak}
+        >
+          Take a Break (5:00)
+        </button>
+        <button 
+          className="action-button new-session-button"
+          onClick={onNewSession}
+        >
+          Start New Session
+        </button>
       </div>
     </div>
   );
 };
-
-const StatItem = ({ value, label, icon }) => (
-  <div className="stat-item">
-    <span className="stat-icon">{icon}</span>
-    <span className="stat-value">{value}</span>
-    <span className="stat-label">{label}</span>
-  </div>
-);
-
-function calculateProgress(current, total) {
-  const circumference = 2 * Math.PI * 52;
-  const progress = 1 - (current / total);
-  return circumference * progress;
-}

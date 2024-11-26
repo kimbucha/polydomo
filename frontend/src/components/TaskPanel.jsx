@@ -1,5 +1,4 @@
-import React from 'react';
-import classNames from 'classnames';
+import React, { useEffect, useRef } from 'react';
 
 export const TaskPanel = ({ 
   taskInput,
@@ -9,35 +8,47 @@ export const TaskPanel = ({
   isBreak,
   handleKeyPress
 }) => {
-  const panelClasses = classNames('task-input-container', {
-    'visible': isVisible,
-    'break': isBreak
-  });
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (isVisible && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isVisible]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (taskInput.trim()) {
+      handleStartTimer();
+    }
+  };
 
   return isVisible ? (
-    <div className={panelClasses}>
-      <label htmlFor="taskInput" className="task-label">
-        What are you focusing on?
-      </label>
-      <input
-        id="taskInput"
-        type="text"
-        className="task-input"
-        value={taskInput}
-        onChange={(e) => setTaskInput(e.target.value)}
-        onKeyPress={handleKeyPress}
-        placeholder="Enter your focus task..."
-        autoFocus
-      />
-      <button 
-        className="primary-button"
-        onClick={handleStartTimer}
-        disabled={!taskInput.trim()}
-      >
-        Start Focus Session
-      </button>
+    <div className={`task-panel ${isBreak ? 'break' : 'focus'}`}>
+      <h2 className="task-panel-title">
+        {isBreak ? 'Break Time!' : 'What are you focusing on?'}
+      </h2>
+      
+      <form onSubmit={handleSubmit} className="task-input-wrapper">
+        <input
+          ref={inputRef}
+          type="text"
+          className="task-input"
+          value={taskInput}
+          onChange={(e) => setTaskInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder={isBreak ? 'Take a breather...' : 'Enter your focus task...'}
+          aria-label="Task input"
+        />
+        
+        <button 
+          type="submit"
+          className={`start-button ${isBreak ? 'break' : 'focus'} ${!taskInput.trim() ? 'disabled' : ''}`}
+          disabled={!taskInput.trim()}
+        >
+          {isBreak ? 'Start Break' : 'Start Focus Session'}
+        </button>
+      </form>
     </div>
   ) : null;
 };
-
-export default TaskPanel;

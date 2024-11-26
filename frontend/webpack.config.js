@@ -3,10 +3,11 @@ const TerserPlugin = require('terser-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
-  mode: 'production',
-  devtool: 'source-map',
+  mode: 'development',
+  devtool: 'inline-source-map', // Changed for better debugging
   entry: {
     popup: './src/index.jsx',
     background: './src/background.js'
@@ -17,22 +18,12 @@ module.exports = {
     clean: true
   },
   optimization: {
-    minimize: true,
-    minimizer: [
-      new TerserPlugin({
-        terserOptions: {
-          format: {
-            comments: false,
-          },
-        },
-        extractComments: false,
-      }),
-      new CssMinimizerPlugin()
-    ],
+    minimize: false, // Disabled for debugging
     splitChunks: {
+      chunks: 'all',
       cacheGroups: {
-        reactVendor: {
-          test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+        vendor: {
+          test: /[\\/]node_modules[\\/]/,
           name: 'vendor-react',
           chunks: 'all',
         }
@@ -43,12 +34,18 @@ module.exports = {
     new MiniCssExtractPlugin({
       filename: 'styles.css'
     }),
+    new HtmlWebpackPlugin({
+      template: './public/popup.html',
+      filename: 'popup.html',
+      chunks: ['popup', 'vendor-react']
+    }),
     new CopyPlugin({
       patterns: [
         { 
           from: 'public',
+          to: '',
           globOptions: {
-            ignore: ['**/index.html']
+            ignore: ['**/*.html']
           }
         }
       ]
@@ -62,7 +59,18 @@ module.exports = {
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-env', '@babel/preset-react']
+            presets: [
+              ['@babel/preset-env', {
+                targets: {
+                  chrome: "58",
+                },
+                debug: true // Added for debugging
+              }],
+              ['@babel/preset-react', {
+                runtime: 'automatic',
+                development: true // Added for debugging
+              }]
+            ]
           }
         }
       },
@@ -70,7 +78,13 @@ module.exports = {
         test: /\.css$/,
         use: [
           MiniCssExtractPlugin.loader,
-          'css-loader'
+          {
+            loader: 'css-loader',
+            options: {
+              sourceMap: true // Added for debugging
+            }
+          },
+          'postcss-loader'
         ]
       }
     ]

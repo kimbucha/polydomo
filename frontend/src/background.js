@@ -24,8 +24,8 @@ let state = {
     }
   },
   settings: {
-    focusDuration: 25,
-    breakDuration: 5,
+    focusDuration: 25 * 60,
+    breakDuration: 5 * 60,
     dailyGoal: 8,
     popupOnComplete: true
   }
@@ -61,14 +61,12 @@ function handleMessage(request, port) {
 
     case 'resetTimer':
       clearInterval(timer);
-      timer = null;
+      state.timeLeft = state.isBreak ? 
+        state.settings.breakDuration : 
+        state.settings.focusDuration;
       state.isRunning = false;
-      state.isCompleted = false;
-      state.timeLeft = state.settings.focusDuration * 60;
       updateBadgeAndIcon();
       broadcastState();
-      saveState();
-      port.postMessage({ type: 'TIMER_RESPONSE', success: true });
       break;
 
     case 'startBreak':
@@ -83,15 +81,11 @@ function handleMessage(request, port) {
       
       updateBadgeAndIcon();
       broadcastState();
-      saveState();
-      port.postMessage({ type: 'TIMER_RESPONSE', success: true });
       break;
 
     case 'addSubTask':
       state.subTasks.push(request.task);
       broadcastState();
-      saveState();
-      port.postMessage({ type: 'TIMER_RESPONSE', success: true });
       break;
 
     case 'switchTask':
@@ -100,8 +94,6 @@ function handleMessage(request, port) {
       }
       state.currentTask = request.task;
       broadcastState();
-      saveState();
-      port.postMessage({ type: 'TIMER_RESPONSE', success: true });
       break;
 
     case 'updateSettings':
@@ -115,8 +107,31 @@ function handleMessage(request, port) {
           state.settings.focusDuration * 60;
       }
       broadcastState();
-      saveState();
-      port.postMessage({ type: 'TIMER_RESPONSE', success: true });
+      break;
+
+    case 'pauseTimer':
+      clearInterval(timer);
+      state.isRunning = false;
+      updateBadgeAndIcon();
+      broadcastState();
+      break;
+
+    case 'resumeTimer':
+      clearInterval(timer);
+      state.isRunning = true;
+      timer = setupTimer();
+      updateBadgeAndIcon();
+      broadcastState();
+      break;
+
+    case 'updateWindowSize':
+      const { width, height } = request;
+      chrome.windows.getCurrent((window) => {
+        chrome.windows.update(window.id, {
+          width: Math.max(width, 320),
+          height: Math.max(height, 400)
+        });
+      });
       break;
   }
 }
@@ -142,6 +157,19 @@ const broadcastState = () => {
       console.error('Error broadcasting to port:', e);
     }
   });
+
+  // Update window size based on state
+  const dimensions = getWindowDimensions(state);
+  ports.forEach(port => {
+    try {
+      port.postMessage({
+        type: 'WINDOW_DIMENSIONS',
+        dimensions
+      });
+    } catch (e) {
+      console.error('Error broadcasting dimensions:', e);
+    }
+  });
 };
 
 // Keep service worker active
@@ -164,32 +192,37 @@ chrome.storage.local.get(['timerState'], (result) => {
     const now = Date.now();
     const timePassed = now - (savedState.lastSaved || now);
     
+    // Reset completed state on new session
+    savedState.isCompleted = false;
+    savedState.isRunning = false;
+    
     // If timer was running, adjust timeLeft
     if (savedState.isRunning) {
       const secondsPassed = Math.floor(timePassed / 1000);
       savedState.timeLeft = Math.max(0, savedState.timeLeft - secondsPassed);
-      
-      // If timer would have completed while away
-      if (savedState.timeLeft === 0) {
-        savedState.isRunning = false;
-        savedState.isCompleted = true;
-      }
     }
     
-    state = savedState;
+    // Merge saved state with defaults
+    state = {
+      ...state,  // Keep default state as fallback
+      ...savedState,
+      stats: {
+        today: {
+          pomodoros: savedState.stats?.today?.pomodoros || 0,
+          totalFocusMinutes: savedState.stats?.today?.totalFocusMinutes || 0
+        },
+        streaks: {
+          current: savedState.stats?.streaks?.current || 0
+        },
+        dailyGoal: savedState.stats?.dailyGoal || 8
+      }
+    };
   }
   
-  // Ensure valid state on reload
-  if (!state.isRunning && !state.isCompleted) {
-    state.timeLeft = state.isBreak ? 
-      state.settings.breakDuration * 60 : 
-      state.settings.focusDuration * 60;
-    state.isBreak = false;
-  }
-  
-  if (state.isRunning) {
-    timer = setupTimer();
-  }
+  // Always ensure valid state
+  state.timeLeft = state.isBreak ? 
+    state.settings.breakDuration * 60 : 
+    state.settings.focusDuration * 60;
   
   broadcastState();
 });
@@ -215,27 +248,34 @@ const setupTimer = () => {
   }
 };
 
-const startTimer = (task, focusDuration) => {
-  console.log('Background: Starting timer with task:', task);
-  state.subTasks = [];
-  if (state.isRunning) {
-    console.log('Timer already running');
-    return false;
-  }
+const startTimer = (task, duration) => {
+  console.log('Starting timer with:', { task, duration });
   
   clearInterval(timer);
   
-  updateIcon();
-  state.currentTask = task;
-  state.timeLeft = state.isBreak ? 
-    state.settings.breakDuration * 60 : 
-    focusDuration * 60;
-  state.isRunning = true;
-  state.isCompleted = false;
+  state = {
+    ...state,
+    timeLeft: duration,
+    isRunning: true,
+    currentTask: task,
+    isCompleted: false,
+    isBreak: false
+  };
+  
+  timer = setInterval(() => {
+    if (state.timeLeft > 0) {
+      state.timeLeft--;
+      updateBadgeAndIcon();
+      broadcastState();
+      saveState(); // Save state periodically
+    } else {
+      handleTimerComplete();
+    }
+  }, 1000);
   
   updateBadgeAndIcon();
-  timer = setupTimer();
-  
+  broadcastState();
+  saveState(); // Save initial state
   return true;
 };
 
@@ -375,4 +415,14 @@ chrome.runtime.onSuspend.addListener(() => {
   clearInterval(timer);
   saveState();
 });
+
+function getWindowDimensions(state) {
+  if (!state.isRunning && !state.isCompleted) {
+    return { width: 320, height: 400 };
+  } else if (state.isRunning) {
+    return { width: 400, height: 500 };
+  } else {
+    return { width: 400, height: 600 };
+  }
+}
 
